@@ -65,14 +65,6 @@ public class PostgreSqlMyDatasetDumpWriter implements Sink, EntityProcessor {
 	private Mercator merc;
 	private Set<Integer> userSet;
 
-
-        /**
-         * {@inheritDoc}
-         */
-        public void initialize(Map<String, Object> metaData) {
-                // Nothing to do here
-        }
-
 	/**
 	 * Creates a new instance.
 	 *
@@ -117,6 +109,12 @@ public class PostgreSqlMyDatasetDumpWriter implements Sink, EntityProcessor {
 		userSet = new HashSet<Integer>();
 	}
 
+	/**
+	 * {@inheritDoc}
+	 */
+	public void initialize(Map<String, Object> metaData) {
+		// Nothing to do here
+	}
 
 	/**
 	 * {@inheritDoc}
