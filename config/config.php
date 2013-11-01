@@ -168,6 +168,7 @@ $config['postgis.sql']['ubuntu/postgis 9.1'] = '/usr/share/postgresql/9.1/contri
 $config['postgis.sql']['ubuntu/postgis 9.0'] = '/usr/local/share/postgis/postgis.sql';
 $config['postgis.sql']['debian6/postgis 8.4'] = '/usr/share/postgresql/8.4/contrib/postgis-1.5/postgis.sql';
 $config['postgis.sql']['ubuntu/postgis 8.4'] = '/usr/share/postgresql-8.4-postgis/postgis.sql';
+$config['postgis.sql']['arch linux'] = '/usr/share/postgresql/contrib/postgis-2.1/postgis.sql';
 
 // various file locations for hstore initialization file
 $config['hstore.sql']['ubuntu/postgis 9.0'] = '/usr/local/Cellar/postgresql/9.0.1/share/contrib/hstore.sql';
