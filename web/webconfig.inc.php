@@ -1,1 +1,0 @@
-../config/webconfig.inc.php
