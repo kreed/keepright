@@ -249,7 +249,7 @@ function mkcheckbox($et, $en, $ch, $draw_checkbox=true, $subgroup_counter=0, $cl
 	echo "\n\t<img border=0 height=12 src='img/zap" . 10*floor($et/10) . ".png' alt='error marker $et'>\n\t"; 			// use icon 190 for types 191-199
 
 	if ($draw_checkbox) {
-		echo "<input type='checkbox' id='ch$et' name='ch$et' value='1' onclick='javascript:checkbox_click();'";
+		echo "<input type='checkbox' id='ch$et' name='ch$et' value='1' class='$class' onclick='javascript:checkbox_click();'";
 
 		if (($ch==='0' && $class==='error' && !in_array($et, $checks_to_hide)) || in_array($et, $checks_selected)) echo ' checked="checked"';
 

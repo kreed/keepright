@@ -930,7 +930,9 @@ function set_checkboxes(new_value) {
 	// update all the checkboxes
 	for (var i = 0; i < document.myform.elements.length; ++i) {
 		var el=document.myform.elements[i];
-		if (el.type == "checkbox" && el.name.match(/ch[0-9]+/) != null) {
+		if (el.type == "checkbox" && el.name.match(/ch[0-9]+/) != null
+				// uncheck warnings for 'none', but don't check them for 'all'
+				&& (new_value == false || el.className.indexOf('warning') < 0)) {
 			el.checked=new_value;
 		}
 	}
