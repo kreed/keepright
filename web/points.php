@@ -31,6 +31,7 @@ if (!$ch) $ch=0;
 $st = $_GET['st'];
 $lat = 1e7*$_GET['lat'];
 $lon = 1e7*$_GET['lon'];
+$user = $_GET['user'];
 
 $show_ign=isset($_GET['show_ign']) && $_GET['show_ign']<>'0';
 $show_tmpign=isset($_GET['show_tmpign']) && $_GET['show_tmpign']<>'0';
@@ -75,6 +76,7 @@ WHERE TRUE";
 
 if (!$show_ign) $sql.=' AND (c.state IS NULL OR c.state<>"ignore")';
 if (!$show_tmpign) $sql.=' AND (c.state IS NULL OR c.state<>"ignore_temporarily")';
+if ($user) $sql.=' AND (e.user_name = ?)';
 
 $sql .= " ORDER BY POWER(lat-$lat,2)+POWER(lon-$lon,2)";
 //$sql .= " ORDER BY RAND()";
@@ -83,7 +85,10 @@ $sql .= ' LIMIT 100';
 
 
 //echo "$sql\n";
-$result=mysqli_query($db1, $sql);
+$stmt=mysqli_prepare($db1, $sql);
+if ($user) { mysqli_stmt_bind_param($stmt, 's', $user); }
+mysqli_stmt_execute($stmt);
+$result=mysqli_stmt_get_result($stmt);
 
 while ($row = mysqli_fetch_assoc($result)) {
 
@@ -214,7 +219,7 @@ while ($row = mysqli_fetch_assoc($result)) {
 		$partner_objects . "\n";
 }
 
-mysqli_free_result($result);
+mysqli_stmt_close($stmt);
 mysqli_close($db1);
 
 

@@ -225,6 +225,12 @@ OpenLayers.Control.myPermalink = OpenLayers.Class(OpenLayers.Control, {
 	params["show_ign"] = document.myform.show_ign.checked ? 1 : 0;
 	params["show_tmpign"] = document.myform.show_tmpign.checked ? 1 : 0;
 
+	if (document.myform.userfilter.value) {
+		params["userfilter"] = document.myform.userfilter.value;
+	} else {
+		delete params["userfilter"];
+	}
+
         return params;
     },
 
@@ -489,6 +495,7 @@ loadText: function() {
 			"&show_ign="+ (document.myform.show_ign.checked ? 1 : 0)+
 			"&show_tmpign="+ (document.myform.show_tmpign.checked ? 1 : 0)+
 			"&lang="+document.myform.lang.value+
+			"&user="+document.myform.userfilter.value+
 			"&"+getURL_checkboxes();
 
 
@@ -959,10 +966,10 @@ function updateCookie() {
 		new OpenLayers.Projection("EPSG:4326"));
 
 	setCookie(lonlat.lon, lonlat.lat, map.getZoom(), 
-		getURL_checkboxes(false, false), document.myform.lang.value)
+		getURL_checkboxes(false, false), document.myform.lang.value, document.myform.userfilter.value)
 }
 
-function setCookie(lon, lat, zoom, hiddenChecks, lang) {
+function setCookie(lon, lat, zoom, hiddenChecks, lang, userfilter) {
 	var expiry = new Date();
 	expiry.setYear(expiry.getFullYear() + 10);
 
@@ -971,7 +978,8 @@ function setCookie(lon, lat, zoom, hiddenChecks, lang) {
 		lat + '|' +
 		zoom + '|' +
 		hiddenChecks + '|' +
-		lang +
+		lang + '|' +
+		userfilter +
 		'; expires=' + expiry.toGMTString();
 }
 
@@ -989,11 +997,11 @@ function setLang(lang) {
 
 			document.cookie = parts.join('|');
 		} else {
-			setCookie('', '', '', '', lang)
+			setCookie('', '', '', '', lang, '')
 		}
 		//alert(document.cookie);
 	} else {
-		setCookie('', '', '', '', lang)
+		setCookie('', '', '', '', lang, '')
 	}
 }
 

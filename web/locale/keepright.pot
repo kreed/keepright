@@ -1089,6 +1089,15 @@ msgstr ""
 msgid "show temp. ignored errors"
 msgstr ""
 
+msgid "Filter:"
+msgstr ""
+
+msgid "user"
+msgstr ""
+
+msgid "apply"
+msgstr ""
+
 #: report_map.php:189
 msgid "Edit in Potlatch"
 msgstr ""

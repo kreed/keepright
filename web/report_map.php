@@ -12,6 +12,7 @@ if ($cookie) {
 	$lon=1e7*$cookie[0];
 	$lat=1e7*$cookie[1];
 	$zoom=$cookie[2];
+	$userfilter=$cookie[5];
 }
 
 // second: evaluate URL parameters, overwriting cookie-defaults
@@ -20,11 +21,11 @@ if (isset($_GET['lon'])) $lon = 1e7*htmlentities($_GET['lon']);
 if (isset($_GET['zoom'])) $zoom = 1*htmlentities($_GET['zoom']);
 $highlight_error_id=1*addslashes(htmlentities($_GET['error']));	// error_id and schema name of a specific error the user wants to see
 $highlight_schema=1*addslashes(htmlentities($_GET['schema']));
+if (isset($_GET['userfilter'])) $userfilter = addslashes(htmlentities($_GET['userfilter']));
 
 // flags for display of ignored/temp.ignored errors. Default is "on"
 if (!isset($_GET['show_ign'])) $_GET['show_ign']='1';
 if (!isset($_GET['show_tmpign'])) $_GET['show_tmpign']='1';
-
 $show_ign=$_GET['show_ign']<>'0';
 $show_tmpign=$_GET['show_tmpign']<>'0';
 
@@ -107,7 +108,7 @@ if ($cookie) $checks_to_hide = split(',', $cookie[3]); else $checks_to_hide=arra
 <body onload="init(); outlineInit(); " style="background-color:#f0fff0;">
 
 <div style="font-size:0.7em; width:20%">
-<form name="myform" method="get" action="<?php echo $_SERVER['PHP_SELF']; ?>">
+<form name="myform" method="get" action="<?php echo $_SERVER['PHP_SELF']; ?>" onsubmit="checkbox_click(); return false">
 
 <a href="<?php echo $path; ?>"><img border=0 src="keepright.png" height="80px" alt="keep-right logo"></a>&nbsp;
 <?php
@@ -196,6 +197,13 @@ echo "
 <input type='checkbox' id='show_ign' name='show_ign' value='1' onclick='javascript:checkbox_click();' " . ($show_ign ? 'checked="checked"' : '') . "><label for='show_ign'>" . T_gettext('show ignored errors') . "</label><br>
 
 <input type='checkbox' id='show_tmpign' name='show_tmpign' value='1' onclick='javascript:checkbox_click();' " . ($show_tmpign ? 'checked="checked"' : '') . "><label for='show_tmpign'>" . T_gettext('show temp. ignored errors') . "</label><br>
+
+<div>
+<label for='userfilter'>" . T_gettext('Filter:') . "</label>
+<input size='12' type='text' placeholder='" . T_gettext('user') . "' name='userfilter' id='userfilter' value='" . $userfilter ."'>
+<input type='button' value='" . T_gettext('apply') . "' onClick='javascript:checkbox_click()'>
+</div>
+
 
 <a name='editierlink' id='editierlink' target='_blank' href='http://www.openstreetmap.org/edit?lat=" . $lat/1e7. "&lon=" . $lon/1e7 . "&zoom=$zoom'>" . T_gettext('Edit in Potlatch') . "</a>
 <a id='rsslink' href='export.php'>RSS</a> <a id='gpxlink' href='export.php'>GPX</a>
