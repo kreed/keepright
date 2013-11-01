@@ -622,8 +622,8 @@ parseData: function(ajaxRequest) {
 			'<span style="white-space:nowrap;"><textarea cols="25" rows="2" name="co">'+comment+'</textarea>'+
 			'<input type="hidden" name="schema" value="'+schema+'">'+
 			'<input type="hidden" name="id" value="'+error_id+'">'+
-			'<input type="button" value="'+txt11+'" onClick="javascript:saveComment('+schema+', '+error_id+', '+error_type+');">' +
-			'<input type="button" value="'+txt12+'" onClick="javascript:closeBubble('+schema+', '+error_id+');">' +
+			'<input type="button" value="'+txt11+'" onClick="javascript:saveComment(\''+schema+'\', '+error_id+', '+error_type+');">' +
+			'<input type="button" value="'+txt12+'" onClick="javascript:closeBubble(\''+schema+'\', '+error_id+');">' +
 			'</form><small><br>'+txt13+'</span>' +
 			txt14 + '<a href="report_map.php?schema='+schema+'&error='+error_id+'">'+error_id+'</a><br>' + txt15 + ' ' + object_type + ': <a href="http://www.openstreetmap.org/user/' + user_name + '" target="_blank">' + user_name + '</a> ' + object_timestamp + '</small>';
 		}

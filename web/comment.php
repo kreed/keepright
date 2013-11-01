@@ -27,26 +27,32 @@ if ($st=="ignore_t") $st = "ignore_temporarily";
 $agent=addslashes($_SERVER['HTTP_USER_AGENT']);
 $ip=$_SERVER['REMOTE_ADDR'];
 
+function param_query($link, $sql, $param) {
+	$stmt=mysqli_prepare($link, $sql);
+	mysqli_stmt_bind_param($stmt, 's', $param);
+	mysqli_stmt_execute($stmt);
+}
 
-if (is_numeric($id) && is_numeric($schema)) {
+if (is_numeric($id) && $schema) {
 
 	// move any comment into history
-	$result=mysqli_query($db1, "
+	param_query($db1, "
 		INSERT INTO $comments_historic_name
 		SELECT * FROM $comments_name
-		WHERE `schema`='$schema' AND error_id=$id
-	");
+		WHERE `schema`=? AND error_id=$id
+	", $schema);
+
 	// drop old comment
-	$result=mysqli_query($db1, "
+	param_query($db1, "
 		DELETE FROM $comments_name
-		WHERE `schema`='$schema' AND error_id=$id
-	");
+		WHERE `schema`=? AND error_id=$id
+	", $schema);
 	// insert new comment
-	$result=mysqli_query($db1, "
+	param_query($db1, "
 		INSERT INTO $comments_name (`schema`, error_id, state, comment, ip, user_agent) VALUES (
-			'$schema', $id, '$st', '$co', '$ip', '$agent'
+			?, $id, '$st', '$co', '$ip', '$agent'
 		)
-	");
+	", $schema);
 }
 
 mysqli_close($db1);
