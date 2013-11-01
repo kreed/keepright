@@ -33,3 +33,8 @@
 .oimg {
 	border-style: none;
 }
+
+body, form {
+	margin: 0;
+	padding: 0;
+}

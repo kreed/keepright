@@ -104,10 +104,10 @@ if ($cookie) $checks_to_hide = split(',', $cookie[3]); else $checks_to_hide=arra
 </script>
 </head>
 
-<body onload="init(); outlineInit(); ">
+<body onload="init(); outlineInit(); " style="background-color:#f0fff0;">
 
+<div style="font-size:0.7em; width:20%">
 <form name="myform" method="get" action="<?php echo $_SERVER['PHP_SELF']; ?>">
-<div style="background-color:#f0fff0; font-size:0.7em; position:absolute; left:0em; width:99%; overflow:hidden; z-index:0;">
 
 <a href="<?php echo $path; ?>"><img border=0 src="keepright.png" height="80px" alt="keep-right logo"></a>&nbsp;
 <?php
@@ -201,13 +201,13 @@ echo "
 <a id='rsslink' href='export.php'>RSS</a> <a id='gpxlink' href='export.php'>GPX</a>
 
 
-<div style='overflow:auto; width:20%'>";
+<div>";
 printf(T_gettext('You will see up to %d error markers starting in the center of the map. Please allow a few seconds for the error markers to appear after panning.'), 100) . '<br>';
 
 printf(T_gettext('Site updated at %s'), get_updated_date(find_schema($db1, $lat, $lon)));
 
 echo "<br></div>
-</div></form>
+</form></div>
 ";
 
 
@@ -219,7 +219,7 @@ echo "<br></div>
 
 
 // the map goes in here:
-echo '<div style="position:absolute; left:20%; top:0; width:79%; height:99%;" id="map"></div>';
+echo '<div style="position:fixed; left:20%; top:0; width:80%; height:100%;" id="map"></div>';
 
 
 // this is a hidden iframe into which the JOSM-Link is called (remote control plugin)
