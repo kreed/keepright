@@ -115,7 +115,7 @@ query("
 			(t.k='noexit' AND t.v IN ('yes', 'true', '1')) OR
 			(t.k='highway' AND t.v='turning_circle') OR
 			(t.k='highway' AND t.v='bus_stop') OR
-			t.k='amenity'
+			t.k='amenity' OR t.k='barrier'
 		)
 	)
 ", $db1);
