@@ -428,7 +428,51 @@ query("
 	GROUP BY er.part, er.cnt
 ", $db1);
 
+// faintly connected mini-roundabouts check
+query("
+	WITH roundabouts AS (
+		SELECT node_id
+		FROM node_tags AS t
+		WHERE t.k='highway' AND t.v='mini_roundabout'
+	),"
 
+// Find all ways containing the roundabout. Assume the roundabout is in the
+// middle of the way and assign 2 to the connection count. We will subtract
+// out the ways where the roundabout is an endpoint below.
+. "midways AS (
+		SELECT node_id as id, 2 * COUNT(*) as cnt
+		FROM way_nodes
+		WHERE node_id IN (SELECT node_id FROM roundabouts)
+		GROUP BY node_id
+	),"
+
+// Find ways where the roundabout is a startpoint or endpoint. Assign -1
+// to the connection count to negate our assumption above.
+. " startways AS (
+		SELECT first_node_id as id, -COUNT(*) as cnt
+		FROM ways
+		WHERE first_node_id IN (SELECT node_id FROM roundabouts)
+		GROUP BY first_node_id
+	),
+	endways AS (
+		SELECT last_node_id as id, -COUNT(*) as cnt
+		FROM ways
+		WHERE last_node_id IN (SELECT node_id FROM roundabouts)
+		GROUP BY last_node_id
+	)"
+
+// Sum counts from the 3 tables above
+. "INSERT INTO _tmp_errors (error_type, object_type, object_id, msgid, txt1, last_checked)
+	SELECT $error_type+3, 'node',
+	id, 'This roundabout has only $1 other roads connected. Roundabouts typically have three.', sum(cnt), NOW()
+	FROM (
+		SELECT * FROM midways
+		UNION ALL SELECT * FROM startways
+		UNION ALL SELECT * FROM endways
+	) X
+	GROUP BY id
+	HAVING SUM(cnt)<3
+", $db1);
 
 
 print_index_usage($db1);
