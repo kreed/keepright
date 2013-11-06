@@ -145,34 +145,10 @@ function init_workingDir($schema) {
 	echo "please download the appropriate state.txt file from http://planet.openstreetmap.org/replication/hour according to the date of your planet file and place it into $workingDirectory/state.txt before updating your planet excerpts\n";
 }
 
-
-
-// make a lon value reside between -180..+180
-function fit_limits_lon($value) {
-	if ($value>180.0) return 180.0;
-	if ($value<-180.0) return -180.0;
-	return $value;
-}
-
-// make a lat value reside between -90..+90
-function fit_limits_lat($value) {
-	if ($value>90.0) return 90.0;
-	if ($value<-90.0) return -90.0;
-	return $value;
-}
-
 // build a string suitable for inserting in an osmosis bbox cutting command
 function get_bbox_parameters($schema) {
-	global $schemas, $config;
-
-	$m = $config['cutting_margin'];
-
-	$LEFT = fit_limits_lon(merc_lon(merc_x($schemas[$schema]['left']) - $m));
-	$RIGHT = fit_limits_lon(merc_lon(merc_x($schemas[$schema]['right']) + $m));
-	$TOP = fit_limits_lat(merc_lat(merc_y($schemas[$schema]['top']) + $m));
-	$BOTTOM = fit_limits_lat(merc_lat(merc_y($schemas[$schema]['bottom']) - $m));
-
-	return "left=$LEFT top=$TOP right=$RIGHT bottom=$BOTTOM";
+	$bbox = get_bbox($schema);
+	return "left={$bbox['left']} top={$bbox['top']} right={$bbox['right']} bottom={$bbox['bottom']}";
 }
 
 ?>

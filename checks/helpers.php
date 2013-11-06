@@ -889,4 +889,31 @@ function connectstring($schema='') {
 	return $connectstring;
 }
 
+// make a lon value reside between -180..+180
+function fit_limits_lon($value) {
+	if ($value>180.0) return 180.0;
+	if ($value<-180.0) return -180.0;
+	return $value;
+}
+
+// make a lat value reside between -90..+90
+function fit_limits_lat($value) {
+	if ($value>90.0) return 90.0;
+	if ($value<-90.0) return -90.0;
+	return $value;
+}
+
+function get_bbox($schema) {
+	global $schemas, $config;
+
+	$m = $config['cutting_margin'];
+
+	$r = array();
+	$r['left'] = fit_limits_lon(merc_lon(merc_x($schemas[$schema]['left']) - $m));
+	$r['right'] = fit_limits_lon(merc_lon(merc_x($schemas[$schema]['right']) + $m));
+	$r['top'] = fit_limits_lat(merc_lat(merc_y($schemas[$schema]['top']) + $m));
+	$r['bottom'] = fit_limits_lat(merc_lat(merc_y($schemas[$schema]['bottom']) - $m));
+	return $r;
+}
+
 ?>
