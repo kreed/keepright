@@ -213,6 +213,10 @@ function ftp_upload($filename) {
 		return;
 	}
 
+	if (!ftp_pasv($conn_id, true)) {
+		echo "warning: couldn't enter ftp passive mode\n";
+	}
+
 	// upload the file
 	if (ftp_put($conn_id, $filename, $local_filename, FTP_BINARY)) {
 		echo "successfully uploaded $local_filename\n";
