@@ -276,5 +276,11 @@ $error_types[410]['subtype'][411]='http error';
 $error_types[410]['subtype'][412]='domain hijacking';
 $error_types[410]['subtype'][413]='non-match';
 
+$error_types[420]['name']='addr:full';
+$error_types[420]['enabled']=true;
+$error_types[420]['source']='0420_addr_full.php';
+$error_types[420]['class']='warning';
+$error_types[420]['description']='Looks for objects tagged with addr:full but not addr:housenumber or addr:housename. The split-out addr tags should be added to make the address parsable by software.';
+
 
 ?>

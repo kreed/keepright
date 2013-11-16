@@ -747,7 +747,14 @@ msgid ""
 "from the osm element"
 msgstr ""
 
+msgid "addr:full"
+msgstr ""
 
+msgid ""
+"This $1 has addr:full but no addr:housenumber or addr:housename. It would "
+"be nice if split-out address tags were added so that software can parse the "
+"address more easily."
+msgstr ""
 
 
 #. full message: "The URL (http://www.belgian-beer-cafe.com.au/heritage) cannot be opened (HTTP status code 404)"

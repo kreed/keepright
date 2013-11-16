@@ -209,7 +209,8 @@ INSERT INTO `error_types` (`error_type`, `error_name`, `error_description`, `err
 (295, 'via is not on the way ends', 'This check is about turn restrictions defined by relations. A turn restriction relation needs a valid type attribute, a way as ''from'' member, another way as ''to'' member and optionally one or more ways or nodes as via members that need to be connected to ''from'' and ''to''', 'error', 1),
 (296, 'wrong restriction angle', 'This check is about turn restrictions defined by relations. A turn restriction relation needs a valid type attribute, a way as ''from'' member, another way as ''to'' member and optionally one or more ways or nodes as via members that need to be connected to ''from'' and ''to''', 'error', 1),
 (297, 'wrong direction of to member', 'This check is about turn restrictions defined by relations. A turn restriction relation needs a valid type attribute, a way as ''from'' member, another way as ''to'' member and optionally one or more ways or nodes as via members that need to be connected to ''from'' and ''to''', 'error', 1),
-(298, 'already restricted by oneway', 'This check is about turn restrictions defined by relations. A turn restriction relation needs a valid type attribute, a way as ''from'' member, another way as ''to'' member and optionally one or more ways or nodes as via members that need to be connected to ''from'' and ''to''', 'error', 1);
+(298, 'already restricted by oneway', 'This check is about turn restrictions defined by relations. A turn restriction relation needs a valid type attribute, a way as ''from'' member, another way as ''to'' member and optionally one or more ways or nodes as via members that need to be connected to ''from'' and ''to''', 'error', 1),
+(420, 'addr:full', 'Looks for objects tagged with addr:full but not addr:housenumber or addr:housename. The split-out addr tags should be added to make the address parsable by software.', 'warning', 1);
 
 
 --
