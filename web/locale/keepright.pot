@@ -1091,7 +1091,7 @@ msgid "apply"
 msgstr ""
 
 #: report_map.php:189
-msgid "Edit in Potlatch"
+msgid "Open current map view on openstreetmap.org"
 msgstr ""
 
 #: report_map.php:194
@@ -1134,11 +1134,7 @@ msgid ""
 msgstr ""
 
 #: myText.js:239
-msgid "Potlatch"
-msgstr ""
-
-#: myText.js:239
-msgid "iD"
+msgid "OSM.org"
 msgstr ""
 
 #: myText.js:244

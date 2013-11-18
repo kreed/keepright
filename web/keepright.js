@@ -1,1067 +1,446 @@
-// compress using http://marijnhaverbeke.nl//uglifyjs
+// compress using ./uglify.sh
 
+///////////////////////////////////////////////////////////
+// overrides for leaflet-hash to save checked error types
+///////////////////////////////////////////////////////////
 
+// save checkbox state into a short-ish hash to make the URL look pretty
+//
+// this creates binary data that is then base64 encoded
+//
+// binary format:
+// byte 0    : length n
+// byte 1 - n: bitflags of primary error types. error numbers are divided by
+//             ten and first two bits reserved for show_ign/tmpign checkboxes
+//             so e.g. if byte 1, bit 2 is set then error 10 is enabled
+//             if byte 3, bit 0 is set then error 230 is enabled
+//
+// from byte n onward the subtype errors follow in two byte pairs
+// first byte: ((parent error type / 10) << 1) + subtype 9 bit
+// second byte: bit flag of subtypes 1-8
+function createCheckboxHash() {
+	var checkboxes = document.myform.querySelectorAll('input[name^=ch]');
 
-///////////////////////////////////////////////////////////////////////////////////////////
-// start of file myPermalink.js
-// derived OpenLayers Class for custom permalink including keepright parameters
-///////////////////////////////////////////////////////////////////////////////////////////
+	var primaryChecked = [];
+	var subChecked = [];
+	for (var i = 0; i < checkboxes.length; ++i) {
+		var el = checkboxes[i];
+		if (el.checked) {
+			var err_no = parseInt(el.name.substr(2));
+			var primary = err_no / 10 >> 0;
+			var sub = err_no % 10;
+			if (sub == 0) {
+				primaryChecked[primary + 1] = true;
+			} else {
+				set_bit(subChecked, primary, sub - 1);
+			}
+		}
+	}
 
+	// stick ign/tmpign in the first two spots
+	if (document.myform.show_ign.checked) primaryChecked[0] = true;
+	if (document.myform.show_tmpign.checked) primaryChecked[1] = true;
 
-/* Copyright (c) 2006-2008 MetaCarta, Inc., published under the Clear BSD
- * license.  See http://svn.openlayers.org/trunk/openlayers/license.txt for the
- * full text of the license. */
+	// store checked error types in an array of 1 byte bitflags
+	var octets = [0];
 
+	for (var i = 0; i < primaryChecked.length; ++i) {
+		if (primaryChecked[i]) {
+			set_bit(octets, 1 + (i / 8 >> 0), i % 8);
+		}
+	}
 
-/**
- * @requires OpenLayers/Control.js
- * @requires OpenLayers/Control/ArgParser.js
- */
+	var j = octets.length;
+	octets[0] = j;
 
-/**
- * Class: OpenLayers.Control.Permalink
- *
- * Inherits from:
- *  - <OpenLayers.Control>
- */
-OpenLayers.Control.myPermalink = OpenLayers.Class(OpenLayers.Control, {
+	for (var i = 0; i < subChecked.length; ++i) {
+		if (subChecked[i]) {
+			var n = i << 1;
+			var bitflag = subChecked[i];
+			if (bitflag >> 8) { // 9th bit is set; stick it in n
+				n = n | 1;
+				bitflag = bitflag & 255;
+			}
+			octets[j++] = n;
+			octets[j++] = bitflag;
+		}
+	}
 
-    /**
-     * APIProperty: argParserClass
-     * {Class} The ArgParser control class (not instance) to use with this
-     *     control.
-     */
-    argParserClass: OpenLayers.Control.ArgParser,
+	function set_bit(array, i, bit) {
+		array[i] = (1 << bit) + (array[i] || 0);
+	}
 
-    /**
-     * Property: element
-     * {DOMElement}
-     */
-    element: null,
+	// base64 encode result, using - instead of /
+	return window.btoa(String.fromCharCode.apply(String, octets)).replace(/\//g, '-');
+}
 
-    /**
-     * APIProperty: base
-     * {String}
-     */
-    base: '',
+// parse base64-encoded checkbox hash created with createCheckboxHash()
+function parseCheckboxesHash(hash) {
+	var octets = window.atob(hash.replace(/-/g, '/'));
+	if (!octets) return null;
 
-    /**
-     * APIProperty: displayProjection
-     * {<OpenLayers.Projection>} Requires proj4js support.  Projection used
-     *     when creating the coordinates in the link. This will reproject the
-     *     map coordinates into display coordinates. If you are using this
-     *     functionality, the permalink which is last added to the map will
-     *     determine the coordinate type which is read from the URL, which
-     *     means you should not add permalinks with different
-     *     displayProjections to the same map.
-     */
-    displayProjection: null,
+	var checked = {};
 
-    /**
-     * Constructor: OpenLayers.Control.Permalink
-     *
-     * Parameters:
-     * element - {DOMElement}
-     * base - {String}
-     * options - {Object} options to the control.
-     */
-    initialize: function(element, base, options) {
-        OpenLayers.Control.prototype.initialize.apply(this, [options]);
-        this.element = OpenLayers.Util.getElement(element);
-        this.base = base || document.location.href;
-    },
+	var n = octets.charCodeAt(0);
+	for (var i = 1; i < n; ++i) {
+		var flag = octets.charCodeAt(i);
+		var error_no = 10 * (8 * (i - 1) - 1);
+		while (flag) {
+			if (flag & 1) {
+				if (error_no == -10) {
+					checked['show_ign'] = true;
+				} else if (error_no == 0) {
+					checked['show_tmpign'] = true;
+				} else {
+					checked['ch' + error_no] = true;
+				}
+			}
+			flag >>= 1;
+			error_no += 10;
+		}
+	}
 
-    /**
-     * APIMethod: destroy
-     */
-    destroy: function()  {
-        if (this.element.parentNode == this.div) {
-            this.div.removeChild(this.element);
-        }
-        this.element = null;
+	for (var i = n; i < octets.length; i = i + 2) {
+		var error_no = octets.charCodeAt(i);
+		var flag = octets.charCodeAt(i + 1);
 
-        this.map.events.unregister('moveend', this, this.updateLink);
+		flag += ((error_no & 1) << 8);
+		error_no = (error_no >> 1) * 10 + 1;
 
-        OpenLayers.Control.prototype.destroy.apply(this, arguments);
-    },
+		while (flag) {
+			if (flag & 1) checked['ch' + error_no] = true;
+			flag >>= 1;
+			error_no += 1;
+		}
+	}
 
-    /**
-     * Method: setMap
-     * Set the map property for the control.
-     *
-     * Parameters:
-     * map - {<OpenLayers.Map>}
-     */
-    setMap: function(map) {
-        OpenLayers.Control.prototype.setMap.apply(this, arguments);
+	return checked;
+}
 
-        //make sure we have an arg parser attached
-        for(var i=0, len=this.map.controls.length; i<len; i++) {
-            var control = this.map.controls[i];
-            if (control.CLASS_NAME == this.argParserClass.CLASS_NAME) {
+// formatHash from leaflet-hash modified to save checkbox hash and userfilter
+L.Hash.prototype.formatHash = function(map) {
+	var center = map.getCenter().wrap();
+	var zoom = map.getZoom();
+	var precision = Math.max(0, Math.ceil(Math.log(zoom) / Math.LN2));
 
-                // If a permalink is added to the map, and an ArgParser already
-                // exists, we override the displayProjection to be the one
-                // on the permalink.
-                if (control.displayProjection != this.displayProjection) {
-                    this.displayProjection = control.displayProjection;
-                }
+	var array = [zoom,
+		center.lat.toFixed(precision),
+		center.lng.toFixed(precision),
+		checkboxHash];
 
-                break;
-            }
-        }
-        if (i == this.map.controls.length) {
-            this.map.addControl(new this.argParserClass(
-                { 'displayProjection': this.displayProjection }));
-        }
+	if (document.myform.userfilter.value)
+		array.push(document.myform.userfilter.value);
 
-    },
+	return "#" + array.join("/");
+}
 
-    /**
-     * Method: draw
-     *
-     * Returns:
-     * {DOMElement}
-     */
-    draw: function() {
-        OpenLayers.Control.prototype.draw.apply(this, arguments);
+// parseHash from leaflet-hash modified to accept up to 5 args.
+// the additional args just ignored here; they are parsed
+// separately down in init()
+L.Hash.prototype.parseHash = function(hash) {
+	var args = splitHash(hash);
+	if (args.length >= 3 && args.length <= 5){
+		var zoom = parseInt(args[0], 10),
+			lat = parseFloat(args[1]),
+			lon = parseFloat(args[2]);
 
-        if (!this.element) {
-            this.div.className = this.displayClass;
-            this.element = document.createElement("a");
-            this.element.innerHTML = OpenLayers.i18n("permalink");
-            this.element.href="";
-            this.div.appendChild(this.element);
-        }
-        this.map.events.on({
-            'moveend': this.updateLink,
-            'changelayer': this.updateLink,
-            'changebaselayer': this.updateLink,
-            scope: this
-        });
-
-        // Make it so there is at least a link even though the map may not have
-        // moved yet.
-        this.updateLink();
-
-        return this.div;
-    },
-
-    /**
-     * Method: updateLink 
-     */
-    updateLink: function() {
-        var href = this.base;
-        if (href.indexOf('?') != -1) {
-            href = href.substring( 0, href.indexOf('?') );
-        }
-
-        href += '?' + OpenLayers.Util.getParameterString(this.createParams());
-        this.element.href = href;
-
-    },
-
-    /**
-     * APIMethod: createParams
-     * Creates the parameters that need to be encoded into the permalink url.
-     *
-     * Parameters:
-     * center - {<OpenLayers.LonLat>} center to encode in the permalink.
-     *     Defaults to the current map center.
-     * zoom - {Integer} zoom level to encode in the permalink. Defaults to the
-     *     current map zoom level.
-     * layers - {Array(<OpenLayers.Layer>)} layers to encode in the permalink.
-     *     Defaults to the current map layers.
-     *
-     * Returns:
-     * {Object} Hash of parameters that will be url-encoded into the
-     * permalink.
-     */
-    createParams: function(center, zoom, layers) {
-        center = center || this.map.getCenter();
-
-        var params = OpenLayers.Util.getParameters(this.base);
-
-        // If there's still no center, map is not initialized yet.
-        // Break out of this function, and simply return the params from the
-        // base link.
-        if (center) {
-
-            //zoom
-            params.zoom = zoom || this.map.getZoom();
-
-            //lon,lat
-            var lat = center.lat;
-            var lon = center.lon;
-
-            if (this.displayProjection) {
-                var mapPosition = OpenLayers.Projection.transform(
-                  { x: lon, y: lat },
-                  this.map.getProjectionObject(),
-                  this.displayProjection );
-                lon = mapPosition.x;
-                lat = mapPosition.y;
-            }
-            params.lat = Math.round(lat*100000)/100000;
-            params.lon = Math.round(lon*100000)/100000;
-
-            //layers
-            layers = layers || this.map.layers;
-            params.layers = '';
-            for (var i=0, len=layers.length; i<len; i++) {
-                var layer = layers[i];
-
-                if (layer.isBaseLayer) {
-                    params.layers += (layer == this.map.baseLayer) ? "B" : "0";
-                } else {
-                    params.layers += (layer.getVisibility()) ? "T" : "F";
-                }
-            }
-        }
-
-	params["ch"]=getURL_checkboxes(false);	// see file report_map.php
-
-	// append checkboxes for hiding ignored errors/temp.ignored errors
-	params["show_ign"] = document.myform.show_ign.checked ? 1 : 0;
-	params["show_tmpign"] = document.myform.show_tmpign.checked ? 1 : 0;
-
-	if (document.myform.userfilter.value) {
-		params["userfilter"] = document.myform.userfilter.value;
+		if (isNaN(zoom) || isNaN(lat) || isNaN(lon)) {
+			return false;
+		} else {
+			return {
+				center: new L.LatLng(lat, lon),
+				zoom: zoom
+			};
+		}
 	} else {
-		delete params["userfilter"];
+		return false;
 	}
+}
 
-        return params;
-    },
-
-    CLASS_NAME: "OpenLayers.Control.myPermalink"
-});
-
-
-
-
-
-///////////////////////////////////////////////////////////////////////////////////////////
-// start of file myTextFormat.js
-// derived OpenLayers Class for parsing keepright error file format
-///////////////////////////////////////////////////////////////////////////////////////////
-
-/* Copyright (c) 2006-2008 MetaCarta, Inc., published under a modified BSD license.
- * See http://svn.openlayers.org/trunk/openlayers/repository-license.txt 
- * for the full text of the license. */
-
-
-/*
- * modified by Harald Kleiner, 2009-02-05
- * expanded by more columns
- */
-
-/**
- * @requires OpenLayers/Feature/Vector.js
- * @requires OpenLayers/Geometry/Point.js
- */
-
-/**
- * Class: OpenLayers.Format.Text
- * Read Text format. Create a new instance with the <OpenLayers.Format.Text>
- *     constructor. This reads text which is formatted like CSV text, using
- *     tabs as the seperator by default. It provides parsing of data originally
- *     used in the MapViewerService, described on the wiki. This Format is used
- *     by the <OpenLayers.Layer.Text> class.
- *
- * Inherits from:
- *  - <OpenLayers.Format>
- */
-OpenLayers.Format.myTextFormat = OpenLayers.Class(OpenLayers.Format, {
-    
-    /**
-     * Constructor: OpenLayers.Format.Text
-     * Create a new parser for TSV Text.
-     *
-     * Parameters:
-     * options - {Object} An optional object whose properties will be set on
-     *     this instance.
-     */
-    initialize: function(options) {
-        OpenLayers.Format.prototype.initialize.apply(this, [options]);
-    }, 
-
-    /**
-     * APIMethod: read
-     * Return a list of features from a Tab Seperated Values text string.
-     * 
-     * Parameters:
-     * data - {String} 
-     *
-     * Returns:
-     * An Array of <OpenLayers.Feature.Vector>s
-     */
-    read: function(text) {
-        var lines = text.split('\n');
-        var features = [];
-        // length - 1 to allow for trailing new line
-        for (var lcv = 1; lcv < (lines.length - 1); lcv++) {
-            var currLine = lines[lcv].replace(/^\s*/,'').replace(/\s*$/,'');
-
-            if (currLine.charAt(0) != '#') { /* not a comment */
-
-		var vals = currLine.split('\t');
-		var geometry = new OpenLayers.Geometry.Point(0,0);
-		var attributes = {};
-		var style = {};
-		var icon, iconSize, iconOffset;
-				
-		geometry.y = parseFloat(vals[0]);
-		attributes['lat'] = geometry.y;
-			
-		geometry.x = parseFloat(vals[1]);
-		attributes['lon'] = geometry.x;	
-			
-		attributes['error_name'] = vals[2];
-		
-		attributes['error_type'] = vals[3];
-		attributes['object_type'] = vals[4];
-		attributes['object_type_EN'] = vals[5];
-		attributes['object_id'] = vals[6];
-		attributes['object_timestamp'] = vals[7];
-		attributes['user_name'] = vals[8];
-		attributes['schema'] = vals[9];
-		attributes['error_id'] = vals[10];
-		attributes['description'] = vals[11];
-		attributes['comment'] = vals[12];
-		attributes['state'] = vals[13];
-		style['externalGraphic'] = vals[14];
-		
-		var size = vals[15].split(',');				// icon size
-		style['graphicWidth'] = parseFloat(size[0]);
-		style['graphicHeight'] = parseFloat(size[1]);
-		
-		var offset = vals[16].split(',');			// icon offset
-		style['graphicXOffset'] = parseFloat(offset[0]);
-		style['graphicYOffset'] = parseFloat(offset[1]);
-			
-		attributes['partner_objects'] = vals[17];
-		
-		if (vals.length>1) {
-			if (this.internalProjection && this.externalProjection) {
-				geometry.transform(this.externalProjection, 
-						this.internalProjection); 
-			}
-			var feature = new OpenLayers.Feature.Vector(geometry, attributes, style);
-			features.push(feature);
-		}
-            }
-        }
-        return features;
-    },
-
-    CLASS_NAME: "OpenLayers.Format.myTextFormat" 
-});
-
-
-
-
-
-///////////////////////////////////////////////////////////////////////////////////////////
-// start of file myText.js
-// derived OpenLayers Class for keepright error bubble
-///////////////////////////////////////////////////////////////////////////////////////////
-
-/* Copyright (c) 2006-2008 MetaCarta, Inc., published under the Clear BSD
- * license.	See http://svn.openlayers.org/trunk/openlayers/license.txt for the
- * full text of the license. */
-
-
-/*
- * modified by Harald Kleiner, 2009-02-05
- * expanded text format with new columns specific to keepright
- * created special content inside the bubbles
- */
-
-
-/**
- * @requires OpenLayers/Layer/Markers.js
- * @requires OpenLayers/Request/XMLHttpRequest.js
- */
-
-/**
- * Class: OpenLayers.Layer.Text
- * This layer creates markers given data in a text file.	The <location>
- *	 property of the layer (specified as a property of the options argument
- *	 in the <OpenLayers.Layer.Text> constructor) points to a tab delimited
- *	 file with data used to create markers.
- *
- * The first row of the data file should be a header line with the column names
- *	 of the data. Each column should be delimited by a tab space. The
- *	 possible columns are:
- *		- *point* lat,lon of the point where a marker is to be placed
- *		- *lat*	Latitude of the point where a marker is to be placed
- *		- *lon*	Longitude of the point where a marker is to be placed
- *		- *icon* or *image* URL of marker icon to use.
- *		- *iconSize* Size of Icon to use.
- *		- *iconOffset* Where the top-left corner of the icon is to be placed
- *			relative to the latitude and longitude of the point.
- *		- *title* The text of the 'title' is placed inside an 'h2' marker
- *			inside a popup, which opens when the marker is clicked.
- *		- *description* The text of the 'description' is placed below the h2
- *			in the popup. this can be plain text or HTML.
- *
- * Example text file:
- * (code)
- * lat	lon	title	description	iconSize	iconOffset	icon
- * 10	20	title	description	21,25	-10,-25	http://www.openlayers.org/dev/img/marker.png
- * (end)
- *
- * Inherits from:
- *	- <OpenLayers.Layer.Markers>
- */
-OpenLayers.Layer.myText = OpenLayers.Class(OpenLayers.Layer.Markers, {
-
-/**
-	* APIProperty: location 
-	* {String} URL of text file.	Must be specified in the "options" argument
-	*	 of the constructor. Can not be changed once passed in. 
-	*/
-location:null,
-
-/** 
-	* Property: features
-	* {Array(<OpenLayers.Feature>)} 
-	*/
-features: null,
-
-/**
-	* APIProperty: formatOptions
-	* {Object} Hash of options which should be passed to the format when it is
-	* created. Must be passed in the constructor.
-	*/
-formatOptions: null, 
-
-/** 
-	* Property: selectedFeature
-	* {<OpenLayers.Feature>}
-	*/
-selectedFeature: null,
-
-
-
-activePopup: null,
-activeFeature: null,
-clicked: false,
-
-error_ids: {},
-
-/**
-	* Constructor: OpenLayers.Layer.Text
-	* Create a text layer.
-	* 
-	* Parameters:
-	* name - {String} 
-	* options - {Object} Object with properties to be set on the layer.
-	*	 Must include <location> property.
-	*/
-initialize: function(name, options) {
-	OpenLayers.Layer.Markers.prototype.initialize.apply(this, arguments);
-	this.features = new Array();
-},
-
-/**
-	* APIMethod: destroy 
-	*/
-destroy: function() {
-	// Warning: Layer.Markers.destroy() must be called prior to calling
-	// clearFeatures() here, otherwise we leak memory. Indeed, if
-	// Layer.Markers.destroy() is called after clearFeatures(), it won't be
-	// able to remove the marker image elements from the layer's div since
-	// the markers will have been destroyed by clearFeatures().
-	OpenLayers.Layer.Markers.prototype.destroy.apply(this, arguments);
-	this.clearFeatures();
-	this.features = null;
-},
-
-
-/**
-	* Method: loadText
-	* Start the load of the Text data. Don't do this when we first add the layer,
-	* since we may not be visible at any point, and it would therefore be a waste.
-	*/
-loadText: function() {
-
-	if (this.location != null) {
-		// rebuild the link for downloading points text file according to current form settings
-		var loc="points.php?lat="+document.myform.lat.value+
-			"&lon="+document.myform.lon.value+
-			"&zoom="+document.myform.zoom.value+
-			"&show_ign="+ (document.myform.show_ign.checked ? 1 : 0)+
-			"&show_tmpign="+ (document.myform.show_tmpign.checked ? 1 : 0)+
-			"&lang="+document.myform.lang.value+
-			"&user="+document.myform.userfilter.value+
-			"&"+getURL_checkboxes();
-
-
-		var onFail = function(e) {
-			this.events.triggerEvent("loadend");
-		};
-
-		this.events.triggerEvent("loadstart");
-		OpenLayers.Request.GET({
-			url: loc,
-			success: this.parseData,
-			failure: onFail,
-			scope: this
-		});
-		this.loaded = true;
+function splitHash(hash) {
+	hash = hash || location.hash;
+	if (hash.indexOf('#') === 0) {
+		hash = hash.substr(1);
 	}
-},
-
-/**
-	* Method: moveTo
-	* If layer is visible and Text has not been loaded, load Text. 
-	* 
-	* Parameters:
-	* bounds - {Object} 
-	* zoomChanged - {Object} 
-	* minor - {Object} 
-	*/
-moveTo:function(bounds, zoomChanged, minor) {
-	OpenLayers.Layer.Markers.prototype.moveTo.apply(this, arguments);
-	if(this.visibility && !this.loaded){
-		this.loadText();
-	}
-},
-
-/**
-	* Method: parseData
-	*
-	* Parameters:
-	* ajaxRequest - {<OpenLayers.Request.XMLHttpRequest>} 
-	*/
-parseData: function(ajaxRequest) {
-
-	function create_errorbubble_feature(thisObject,feature) {
-		var data = {};
-		var location;
-		var iconSize, iconOffset;
-
-		location = new OpenLayers.LonLat(feature.geometry.x, 							feature.geometry.y);
-
-		if (feature.style.graphicWidth 
-			&& feature.style.graphicHeight) {
-			iconSize = new OpenLayers.Size(
-				feature.style.graphicWidth,
-				feature.style.graphicHeight);
-		}
-
-		// FIXME: At the moment, we only use this if we have an 
-		// externalGraphic, because icon has no setOffset API Method.
-		/**
-		* FIXME FIRST!!
-		* The Text format does all sorts of parseFloating
-		* The result of a parseFloat for a bogus string is NaN.	That
-		* means the three possible values here are undefined, NaN, or a
-		* number.	The previous check was an identity check for null.	This
-		* means it was failing for all undefined or NaN.	A slightly better
-		* check is for undefined.	An even better check is to see if the
-		* value is a number (see #1441).
-		*/
-		if (feature.style.graphicXOffset !== undefined
-			&& feature.style.graphicYOffset !== undefined) {
-			iconOffset = new OpenLayers.Pixel(
-				feature.style.graphicXOffset, 
-				feature.style.graphicYOffset);
-		}
-
-		if (feature.style.externalGraphic != null) {
-			data.icon = new OpenLayers.Icon(feature.style.externalGraphic, iconSize, iconOffset);
-		} else {
-			data.icon = OpenLayers.Marker.defaultIcon();
-
-			//allows for the case where the image url is not 
-			// specified but the size is. use a default icon
-			// but change the size
-			if (iconSize != null) {
-				data.icon.setSize(iconSize);
-			}
-		}
-
-
-		if (feature.attributes.comment == null) feature.attributes.comment="";
-		if (feature.attributes.error_id != null) {
-
-			var error_name=feature.attributes.error_name;
-			var error_type=feature.attributes.error_type;
-			var schema=feature.attributes.schema;
-			var error_id=feature.attributes.error_id;
-			var object_type=feature.attributes.object_type;
-			var object_type_EN=feature.attributes.object_type_EN;
-			var object_id=feature.attributes.object_id;
-			var object_timestamp=feature.attributes.object_timestamp;
-			var user_name=feature.attributes.user_name;
-			var description=feature.attributes.description;
-			var comment=feature.attributes.comment.replace(/<br>/g, "\n");
-			var state=feature.attributes.state;
-			var lat=feature.attributes.lat;
-			var lon=feature.attributes.lon;
-			var partner_objects=feature.attributes.partner_objects;
-
-			if (typeof partner_objects == 'undefined')
-				partner_objects='';
-			else
-				partner_objects=',' + partner_objects;
-
-			data['popupContentHTML'] ='<h5>'+error_name+', '+object_type+' <a href="http://www.openstreetmap.org/browse/'+object_type_EN+'/'+object_id+'" target="_blank">'+object_id+'</a></h5>'+
-			'<p class="p1">'+description+'</p>'+
-
-			'<p class="p2">'+txt4+' <a href="http://localhost:8111/load_and_zoom?left=' + (lon-0.001) + '&right=' + (lon-(-0.001)) + '&top=' + (lat-(-0.001)) + '&bottom=' + (lat-0.001) + '&select=' + object_type_EN + object_id + partner_objects +'&zoom_mode=download" target="hiddenIframe" title="'+txt6+'">'+txt5+'</a> ' +	
-
-			'<a href="http://www.openstreetmap.org/edit?lat=' + lat + '&lon=' + lon + '&zoom=18" target="_blank">'+txt7+'</a> ' +
-
-			'<a href="http://www.openstreetmap.org/edit?editor=id&lat=' + lat + '&lon=' + lon + '&zoom=18" target="_blank">'+txt16+'</a></p>' +
-
-			''+
-			'<form class="p3" name="errfrm_'+schema+'_'+error_id+'" target="hiddenIframe" method="get" action="comment.php">' +
-			'<input type="radio" id="st_'+schema+'_'+error_id+'_n" '+(state!='ignore_t' && state!='ignore' ? 'checked="checked"' :'')+' name="st" value="">'+
-			'<label for="st_'+schema+'_'+error_id+'_n">'+txt8+'</label><br>'+
-			'<input type="radio" id="st_'+schema+'_'+error_id+'_t" '+(state=='ignore_t' ? 'checked="checked"' :'')+' name="st" value="ignore_t">'+
-			'<label for="st_'+schema+'_'+error_id+'_t">'+txt9+'</label><br>'+
-			'<input type="radio" id="st_'+schema+'_'+error_id+'_i" '+(state=='ignore' ? 'checked="checked"' :'')+' name="st" value="ignore">'+
-			'<label for="st_'+schema+'_'+error_id+'_i">'+txt10+'</label><br>'+
-			'<span style="white-space:nowrap;"><textarea cols="25" rows="2" name="co">'+comment+'</textarea>'+
-			'<input type="hidden" name="schema" value="'+schema+'">'+
-			'<input type="hidden" name="id" value="'+error_id+'">'+
-			'<input type="button" value="'+txt11+'" onClick="javascript:saveComment(\''+schema+'\', '+error_id+', '+error_type+');">' +
-			'<input type="button" value="'+txt12+'" onClick="javascript:closeBubble(\''+schema+'\', '+error_id+');">' +
-			'</form><small><br>'+txt13+'</span>' +
-			txt14 + '<a href="report_map.php?schema='+schema+'&error='+error_id+'">'+error_id+'</a><br>' + txt15 + ' ' + object_type + ': <a href="http://www.openstreetmap.org/user/' + user_name + '" target="_blank">' + user_name + '</a> ' + object_timestamp + '</small>';
-		}
-
-
-		data['overflow'] = feature.attributes.overflow || "auto";
-
-		var markerFeature = new OpenLayers.Feature(thisObject, location, data);
-		markerFeature.popupClass=OpenLayers.Popup.FramedCloud;
-
-
-		thisObject.features.push(markerFeature);
-		var marker = markerFeature.createMarker();
-		if (feature.attributes.error_id != null) {
-			marker.events.register("mousedown",markerFeature,thisObject.onClickHandler);
-			marker.events.register("mouseover",markerFeature,thisObject.onHOverHandler);
-			marker.events.register("mouseout",markerFeature,thisObject.onOutHandler);
-		}
-		thisObject.addMarker(marker);
-
-		// open error bubble if it is to highlight
-		if (schema==document.myform.highlight_schema.value && error_id==document.myform.highlight_error_id.value)
-			marker.events.triggerEvent("mousedown");
-
-		return markerFeature.id;
-	}
-
-
-
-
-	var text = ajaxRequest.responseText;
-
-	var options = {};
-
-	OpenLayers.Util.extend(options, this.formatOptions);
-
-	if (this.map && !this.projection.equals(this.map.getProjectionObject())) {
-		options.externalProjection = this.projection;
-		options.internalProjection = this.map.getProjectionObject();
-	}
-
-	var parser = new OpenLayers.Format.myTextFormat(options);
-	var features = parser.read(text);
-	var newfeatures = {};
-	var error_id;
-	var schema;
-	for (var i=0, len=features.length; i<len; i++) {
-		error_id=features[i].attributes.error_id;
-		schema=features[i].attributes.schema;
-		if (error_id != undefined && error_id != null) {
-			if (this.error_ids[schema]==undefined) this.error_ids[schema]={};
-			// create it only if it doesn't already exist
-			if (!this.error_ids[schema][error_id]) {
-				this.error_ids[schema][error_id]=create_errorbubble_feature(this, features[i]);
-			}
-			if (newfeatures[schema]==undefined) newfeatures[schema]={};
-			newfeatures[schema][error_id]=true;
-		}
-	}
-
-
-	// now remove features not needed any more
-	var feature_id = null;
-	for (var sch in this.error_ids) {
-		for (var errid in this.error_ids[sch]) {
-			if (newfeatures[sch]==undefined || !newfeatures[sch][errid]) {
-				//console.log("dropping error id " + sch + "." + " + errid + " " + this.error_ids[sch][errid]);
-				feature_id=this.error_ids[sch][errid];
-				var featureToDestroy = null;
-				var j=0;
-				var len=this.features.length;
-				while (j<len && featureToDestroy==null) {
-					if (this.features[j].id == feature_id) {
-						featureToDestroy=this.features[j];
-					}
-					j++;
-				}
-				if (featureToDestroy != null) {
-					OpenLayers.Util.removeItem(this.features, featureToDestroy);
-
-					// the marker associated to the feature has to be removed from map.markers manually
-					var markerToDestroy = null;
-					var k=0;
-					var len=this.markers.length;
-					while (k<len && markerToDestroy==null) {
-						if (this.markers[k].events.element.id == featureToDestroy.marker.events.element.id) {
-							markerToDestroy=this.markers[k];
-						}
-						k++;
-					}
-					OpenLayers.Util.removeItem(this.markers, markerToDestroy);
-
-					featureToDestroy.destroy();
-					featureToDestroy=null;
-				}
-				delete this.error_ids[sch][errid];
-			}
-		}
-	}
-	this.events.triggerEvent("loadend");
-},
-
-
-
-// declare event handlers for showing and hiding popups
-onClickHandler: function (evt) {
-	this.activeFeature=this;
-
-	if (this.clicked && this.activePopup==this.popup) {
-		this.activePopup.hide();
-		this.clicked=false;
-	} else if ((this.clicked && !this.activePopup==this.popup) || !this.clicked) {
-
-		if (this.activePopup!=null) {
-			this.activePopup.hide();
-		}
-		if (this.popup==null) {
-			this.popup=this.createPopup();
-			this.popup.autoSize=false;
-			this.popup.panMapIfOutOfView=false;//document.myform.autopan.checked;
-			this.popup.setSize(new OpenLayers.Size(380, 380));
-			map.addPopup(this.popup);
-		} else {
-			this.popup.toggle();
-		}
-		this.activePopup=this.popup;
-		this.clicked=true;
-	}
-	OpenLayers.Event.stop(evt);
-},
-
-onHOverHandler: function (evt) {
-	if (!this.clicked) {
-		if (this.activePopup!=null) {
-			this.activePopup.hide();
-		}
-		if (this.popup==null) {
-			this.popup=this.createPopup();
-			this.popup.autoSize=false;
-			this.popup.panMapIfOutOfView=false;//document.myform.autopan.checked;
-			this.popup.setSize(new OpenLayers.Size(380, 380));
-			map.addPopup(this.popup);
-		} else {
-			this.popup.toggle();
-		}
-		this.activePopup=this.popup;
-	}
-	OpenLayers.Event.stop(evt);
-},
-
-onOutHandler: function (evt) {
-	if (!this.clicked && this.activePopup!=null) this.activePopup.hide();
-	OpenLayers.Event.stop(evt);
-},
-
-
-
-
-/**
-* Method: clearFeatures
-*/
-clearFeatures: function() {
-	if (this.features != null) {
-		while(this.features.length > 0) {
-			var feature = this.features[0];
-			OpenLayers.Util.removeItem(this.features, feature);
-			feature.destroy();
-		}
-	}
-},
-
-	CLASS_NAME: "OpenLayers.Layer.myText"
-});
-
-
-
-
-
-
-
-///////////////////////////////////////////////////////////////////////////////////////////
-// start of file keepright.js
-// custom code for keepright user interface
-///////////////////////////////////////////////////////////////////////////////////////////
-
-
-
-//Initialise the 'map' object
-function init() {
-	map = new OpenLayers.Map ("map", {
-		controls:[
-			new OpenLayers.Control.Navigation(),
-			new OpenLayers.Control.PanZoomBar(),
-			new OpenLayers.Control.LayerSwitcher(),
-			new OpenLayers.Control.Attribution()],
-
-		maxExtent: new OpenLayers.Bounds(-20037508,-20037508,20037508,20037508),
-		maxResolution: 156543,
-
-		numZoomLevels: 20,
-		units: 'm',
-		projection: new OpenLayers.Projection("EPSG:900913"),
-		displayProjection: new OpenLayers.Projection("EPSG:4326")
-	} );
-
-	// add the mapnik layer
-	var layerMapnik = new OpenLayers.Layer.OSM.Mapnik("Mapnik", {'attribution': '&copy; <a href="http://www.openstreetmap.org">OpenStreetMap</a> contributors'});
-	map.addLayer(layerMapnik);
-
-	// add the open cycle map layer
-	var layerCycle = new OpenLayers.Layer.OSM.CycleMap("OSM Cycle Map", {'attribution': '&copy; <a href="http://www.openstreetmap.org">OpenStreetMap</a> contributors'});
-	map.addLayer(layerCycle);
-
-	// add point markers layer. This is not the standard text layer but a derived version!
-	pois = new OpenLayers.Layer.myText("Errors on Nodes", { location:poisURL, projection: new OpenLayers.Projection("EPSG:4326")} );
-	map.addLayer(pois);
-
-
-	// move map center to lat/lon
-	var lonLat = new OpenLayers.LonLat(lon, lat).transform(new OpenLayers.Projection("EPSG:4326"), map.getProjectionObject());
-	map.setCenter(lonLat, zoom);
-
-	// add permalink feature. This is not the standard text layer but a derived version!
-	plnk = new OpenLayers.Control.myPermalink();
-	plnk.displayClass="olControlPermalink";
-	map.addControl(plnk);
-
-	// add mouse position lat/lon display feature
-//	mp = new OpenLayers.Control.MousePosition();
-//	map.addControl(mp);
-
-
-	// register event that records new lon/lat coordinates in form fields after panning
-	map.events.register("moveend", map, function() {
-		var pos = this.getCenter().clone();
-		var lonlat = pos.transform(this.getProjectionObject(), new OpenLayers.Projection("EPSG:4326"));
-
-		// remember position in hidden form parameters
-		document.myform.lat.value=lonlat.lat
-		document.myform.lon.value=lonlat.lon
-		document.myform.zoom.value=this.getZoom();
-
-		updateCookie();
-		updateLinks();
-
-		// reload the error table
-		pois.loadText();
+	return hash.split('/');
+}
+
+///////////////////////////////////////
+// error marker code
+////////////////////////////////////////
+
+function updateErrors() {
+	var lonlat = map.getCenter().wrap();
+
+	var loc = "points.php" +
+		"?lat=" + lonlat.lat +
+		"&lon=" + lonlat.lng +
+		"&zoom=" + map.getZoom() +
+		"&show_ign=" + (document.myform.show_ign.checked ? 1 : 0) +
+		"&show_tmpign=" + (document.myform.show_tmpign.checked ? 1 : 0) +
+		"&lang=" + document.myform.lang.value +
+		"&user=" + document.myform.userfilter.value +
+		"&" + getURL_checkboxes();
+
+	var ajax = new XMLHttpRequest();
+	ajax.onload = errorsLoaded;
+	ajax.open('GET', loc, true);
+	ajax.send(null);
+}
+
+function createErrorMarker(id, e) {
+	var icon = makeIcon(e.error_type, e.state);
+	var marker = new HoverMarker(new L.LatLng(e.lat, e.lon), {icon: icon});
+
+	marker.error_id = id;
+
+	var html = '<h5>'+e.error_name+', '+e.object_type+' <a href="http://www.openstreetmap.org/browse/'+e.object_type_EN+'/'+e.object_id+'" target="_blank">'+e.object_id+'</a></h5>'+
+	'<p class="desc">'+e.description+'</p>'+
+	'<p class="edit_links">' +
+	txt4+' <a href="http://localhost:8111/load_and_zoom?left=' + (e.lon-0.001) + '&right=' + (e.lon-(-0.001)) + '&top=' + (e.lat-(-0.001)) + '&bottom=' + (e.lat-0.001) + '&select=' + e.object_type_EN + e.object_id + e.partner_objects +'&zoom_mode=download" target="hiddenIframe" title="'+txt6+'">'+txt5+'</a> ' +
+	'<a href="http://www.openstreetmap.org/edit?lat=' + e.lat + '&lon=' + e.lon + '&zoom=18" target="_blank">'+txt7+'</a> ' +
+	'</p>' +
+
+	'<form name="errfrm_'+ id +'" target="hiddenIframe" method="get" action="comment.php" onsubmit="onPopupSubmit(\'' + id +  '\',' + e.error_type + ')">' +
+	'<input type="radio" id="st_' + id +'_n" '+(e.state!='ignore_temporarily' && e.state!='ignore' ? 'checked="checked"' :'')+' name="st" value="">'+
+	'<label for="st_' + id + '_n">'+txt8+'</label><br>'+
+	'<input type="radio" id="st_' + id +'_t" '+(e.state=='ignore_temporarily' ? 'checked="checked"' :'')+' name="st" value="ignore_temporarily">'+
+	'<label for="st_' + id +'_t">'+txt9+'</label><br>'+
+	'<input type="radio" id="st_' + id +'_i" '+(e.state=='ignore' ? 'checked="checked"' :'')+' name="st" value="ignore">'+
+	'<label for="st_' + id +'_i">'+txt10+'</label><br>'+
+	'<textarea cols="25" rows="2" name="co">'+(e.comment || '')+'</textarea>'+
+	'<input type="hidden" name="schema" value="'+e.schema+'">'+
+	'<input type="hidden" name="id" value="'+e.error_id+'">'+
+	'<br>'+
+	'<input type="submit" value="'+txt11+'">' +
+	'<input type="button" value="'+txt12+'" onClick="javascript:map.closePopup()">' +
+	'</form>' +
+
+	'<p class="footnote">' +
+	txt13 + '<br>' +
+	txt14 + '<a href="report_map.php?schema='+e.schema+'&error='+e.error_id+'">'+e.error_id+'</a><br>' +
+	txt15 + ' ' + e.object_type + ': <a href="http://www.openstreetmap.org/user/' + e.user_name + '" target="_blank">' + e.user_name + '</a> ' + e.object_timestamp +
+	'</p>';
+
+	marker.bindPopup(html, {
+		autoPan: false // auto pan doesn't work well with hover popups
 	});
 
-
-	updateCookie();
-	updateLinks();
-	updateTristates();
+	return marker;
 }
 
+function errorsLoaded(e) {
+	var response = JSON.parse(this.responseText);
+	var errorsToAdd = response.errors;
 
-function saveComment(schema, error_id, error_type) {
-	var myfrm = document['errfrm_'+schema+'_'+error_id];
-	repaintIcon(schema, error_id, myfrm.st, error_type);
-	myfrm.submit();
-	closeBubble(schema, error_id);
-}
-
-
-function repaintIcon(schema, error_id, state, error_type) {
-// state is a reference to the option group inside the bubble's form;
-// state[0].checked==true means state==none
-// state[1].checked==true means state==ignore temporarily
-// state[2].checked==true means state==ignore
-
-	var feature_id = pois.error_ids[schema][error_id];
-	var i=0;
-	var len=pois.features.length;
-	var feature=null;
-	// find feature's id in list of features
-	while (i<len && feature==null) {
-		if (pois.features[i].id == feature_id) feature=pois.features[i];
-		i++;
-	}
-
-	if (state[0].checked) feature.marker.icon.setUrl("img/zap" + error_type + ".png")
-	else if (state[1].checked) feature.marker.icon.setUrl("img/zapangel.png")
-	else if (state[2].checked) feature.marker.icon.setUrl("img/zapdevil.png");
-}
-
-// called as event handler on the cancel button on the bubble
-function closeBubble(schema, error_id) {
-	var feature_id = pois.error_ids[schema][error_id];
-
-	var i=0;
-	var len=pois.features.length;
-	var feature=null;
-	// find feature's id in list of features
-	while (i<len && feature==null) {
-		if (pois.features[i].id == feature_id) feature=pois.features[i];
-		i++;
-	}
-	// call event handler as if one had clicked the icon
-	feature.marker.events.triggerEvent("mousedown");
-}
-
-function updateCookie() {
-	var pos = map.getCenter().clone();
-	var lonlat = pos.transform(map.getProjectionObject(),
-		new OpenLayers.Projection("EPSG:4326"));
-
-	setCookie(lonlat.lon, lonlat.lat, map.getZoom(), 
-		getURL_checkboxes(false, false), document.myform.lang.value, document.myform.userfilter.value)
-}
-
-function setCookie(lon, lat, zoom, hiddenChecks, lang, userfilter) {
-	var expiry = new Date();
-	expiry.setYear(expiry.getFullYear() + 10);
-
-	document.cookie = 'keepright_cookie=' +
-		lon + '|' +
-		lat + '|' +
-		zoom + '|' +
-		hiddenChecks + '|' +
-		lang + '|' +
-		userfilter +
-		'; expires=' + expiry.toGMTString();
-}
-
-
-
-// change lang parameter in cookie, leave all others untouched
-function setLang(lang) {
-	if (document.cookie.length>0) {
-		var parts = document.cookie.split('|');
-		if (parts.length>=4) {
-			if (parts[4].indexOf(';')>0)
-				parts[4] = lang + parts[4].substr(parts[4].indexOf(';'));
-			else
-				parts[4] = lang
-
-			document.cookie = parts.join('|');
+	map.errorLayer.eachLayer(function(e) {
+		if (errorsToAdd[e.error_id]) {
+			// no need to add the error again if we already have a marker for it
+			delete errorsToAdd[e.error_id];
 		} else {
-			setCookie('', '', '', '', lang, '')
+			// old error; remove it
+			map.errorLayer.removeLayer(e);
 		}
-		//alert(document.cookie);
+	});
+
+	// create new markers
+	for (var e in errorsToAdd) {
+		map.errorLayer.addLayer(createErrorMarker(e, errorsToAdd[e]));
+	}
+
+	if (highlight_error) {
+		var marker = getMarkerForError(highlight_error);
+		if (marker) {
+			marker.openPopup();
+			marker.focus();
+		}
+		highlight_error = null;
+	}
+
+	document.getElementById('update_date').innerHTML = response.updated;
+}
+
+function getMarkerForError(error_id) {
+	var errorMarkers = map.errorLayer._layers;
+	for (var i in errorMarkers) {
+		var e = errorMarkers[i];
+		if (e.error_id == error_id) {
+			return e;
+		}
+	}
+	return null;
+}
+
+function onPopupSubmit(error_id, error_type) {
+	var form = document['errfrm_' + error_id];
+	var state = form.querySelector('input[name=st]:checked').value;
+	var marker = getMarkerForError(error_id);
+	if (marker) marker.setIcon(makeIcon(error_type, state));
+	map.closePopup();
+}
+
+function makeIcon(error_type, state) {
+	var img = 'img/';
+	if (state == 'ignore_temporarily') img += 'zapangel.png';
+	else if (state == 'ignore') img += 'zapangel.png';
+	else img += 'zap' + (error_type / 10 >> 0) * 10 + '.png';
+
+	return L.icon({
+		iconUrl: img,
+		iconSize: [24, 24],
+		iconAnchor: [1, 23],
+		popupAnchor: [12, -23]
+	});
+}
+
+// build the list of error type checkbox states for use in URLs
+// echo the error_type number for every active checkbox, separated with ','
+// by default the var.name "ch=" is put in front of the string
+function getURL_checkboxes() {
+	var loc="ch=0";
+	// append error types for any checked checkbox that is called "ch..."
+	var checkboxes = document.myform.querySelectorAll('input[name^=ch]');
+	for (var i = 0; i < checkboxes.length; ++i) {
+		var el = checkboxes[i];
+		if (el.checked)
+			loc+="," + el.name.substr(2);
+	}
+	return loc;
+}
+
+// extension of L.Marker that shows the popup when the marker
+// is hovered over. the popup will close when the mouse is moved
+// away unless the marker is "focused" by clicking on it
+//
+// inspired by https://gist.github.com/sowelie/5099663
+var HoverMarker = L.Marker.extend({
+	bindPopup: function(htmlContent, options) {
+		L.Marker.prototype.bindPopup.apply(this, [htmlContent, options]);
+
+		// override click handler with our own version that sets the
+		// focused state
+		this.off("click");
+		this.on("click", function() {
+			if (this._popup._isOpen) {
+				if (this.focused) {
+					this.closePopup();
+				} else {
+					this.focus();
+				}
+			} else {
+				this.openPopup();
+				this.focus();
+			}
+		}, this);
+
+		// open popup on mouseover
+		this.on("mouseover", this.openPopup, this);
+
+		// close popup on mouseout if not focused
+		this.on("mouseout", function() {
+			if (!this.focused) {
+				this.closePopup();
+			}
+		}, this);
+
+		// reset focused flag when popup is closed
+		this.on("popupclose", function() {
+			this.focused = false;
+		});
+	},
+
+	focus: function() {
+		this.focused = true;
+
+		// pan the map so that the popup is in view
+		var tmp = this._popup.options.autoPan;
+		this._popup.options.autoPan = true;
+		this._popup._adjustPan();
+		this._popup.options.autoPan = tmp;
+	}
+});
+
+///////////////////////////////////////////////////////////////////////////////////////////
+// sidebar/checkbox functions
+///////////////////////////////////////////////////////////////////////////////////////////
+
+// check all the checkboxes saved in the checkbox hash
+// will look for saved hash from 3 sources:
+// 1. first tries the url hash
+// 2. second tries localStorage
+// 3. finally falls back to checking all errors
+//
+// error types passed in forced_checked will always be checked regardless of
+// above
+function initCheckboxes(force_checked) {
+	var checks = null;
+
+	var args = splitHash();
+	if (args.length > 4 && args[3]) {
+		checks = parseCheckboxesHash(args[3]);
+	}
+
+	// if the url hash fails, try the localStorage
+	if (!checks) {
+		var cookie = loadLocals();
+		if (cookie && cookie.checkHash) {
+			checks = parseCheckboxesHash(cookie.checkHash);
+		}
+	}
+
+	if (!checks) {
+		// if we still can't load the saved checks, default to all errors
+		document.myform.show_ign.checked = true;
+		document.myform.show_tmpign.checked = true;
+
+		var errors = document.myform['tristate-1'];
+		errors.checked = true;
+		tristate_click(errors);
 	} else {
-		setCookie('', '', '', '', lang, '')
+		for (var et in checks) {
+			var el = document.myform[et];
+			if (el) {
+				el.checked = true;
+			}
+		}
+	}
+
+	if (force_checked) {
+		for (var et in force_checked) {
+			var el = document.myform[et];
+			if (el) {
+				el.checked = true;
+			}
+		}
 	}
 }
 
 // update edit-in-potlatch-link and links for rss/gpx export
 // call this after a pan and after changing checkboxes
 function updateLinks() {
-
-	var pos = map.getCenter().clone();
-	var lonlat = pos.transform(map.getProjectionObject(), new OpenLayers.Projection("EPSG:4326"));
+	var lonlat = map.getCenter().wrap();
 
 	// update edit-in-potlatch-link
 	var editierlink = document.getElementById('editierlink');
-	editierlink.href="http://www.openstreetmap.org/edit?lat=" + lonlat.lat + "&lon=" + lonlat.lon + "&zoom=" + map.getZoom();
-
+	editierlink.href="http://www.openstreetmap.org/#map=" + L.Hash.formatHash(map).substr(1);
 
 	// update links for rss/gpx export
 	var rsslink=document.getElementById('rsslink');
 	var gpxlink=document.getElementById('gpxlink');
-	var b=map.getExtent();
-	var bbox = b.transform(map.getProjectionObject(), new OpenLayers.Projection("EPSG:4326"));
+
+	var bounds = map.getBounds();
+	// no wrap function for LatLngBounds, so we have call it on the points :(
+	var nw = bounds.getNorthWest().wrap();
+	var se = bounds.getSouthEast().wrap();
 
 	var url = 'export.php?format=';
-	var params = getURL_checkboxes() + '&left=' + bbox.left + '&bottom=' + bbox.bottom + '&right=' + bbox.right + '&top=' + bbox.top;
+	var params = getURL_checkboxes() + '&left=' + nw.lng + '&bottom=' + se.lat + '&right=' + se.lng + '&top=' + nw.lat;
 
 	rsslink.href = url + 'rss&' + params;
 	gpxlink.href = url + 'gpx&' + params;
 }
 
-
-
-// reload the error types and the permalink,
-// which includes the error type selection
-// after every onClick for error_type checkboxes
-function checkbox_click() {
-	pois.loadText();
-	plnk.updateLink();
-	updateCookie();
-	updateLinks();
-	updateTristates()
-}
-
-
-function tristate_click(el) {
-	var newValue = el.checked;
-
-	var ul = el.parentNode.getElementsByTagName('ul')[0];
-
-	var checkboxes = ul.querySelectorAll('input[name^=ch]');
-	for (var j = 0; j < checkboxes.length; ++j) {
-		checkboxes[j].checked = newValue;
-	}
-
-	checkbox_click();
-}
-
-// build the list of error type checkbox states for use in URLs
-// echo the error_type number for every active checkbox, separated with ','
-// by default the var.name "ch=" is put in front of the string, this
-// can be turned off with the optional boolean parameter
-// setting the second parameter to false makes the function return all
-// checkboxes that are _not_ checked (all hidden error types)
-function getURL_checkboxes(includeVariableName, listActiveCheckboxes) {
-	var loc="";
-
-	if (includeVariableName === undefined) {
-		includeVariableName = true;
-	}
-
-	if (listActiveCheckboxes === undefined) {
-		listActiveCheckboxes = true;
-	}
-
-	if (includeVariableName) {
-		loc="ch=0";
-	} else {
-		loc="0";
-	}
-
-	// append error types for any checked checkbox that is called "ch..."
-	var checkboxes = document.myform.querySelectorAll('input[name^=ch]');
-	for (var i = 0; i < checkboxes.length; ++i) {
-		var el = checkboxes[i];
-		if (el.checked == listActiveCheckboxes)
-			loc+="," + el.name.substr(2);
-	}
-	return loc;
-}
-
+// update the indeterminate property on all tristate checkboxes
 function updateTristates() {
 	var tristates = document.myform.querySelectorAll('input[name^=tristate]');
 	for (var i = 0; i < tristates.length; ++i) {
@@ -1092,4 +471,107 @@ function updateTristates() {
 			el.indeterminate = true;
 		}
 	}
+}
+
+// perform the state updates required after clicking a checkbox: update tristates,
+// update hash, reload error markers, etc.
+function checkbox_click() {
+	updateTristates();
+	checkboxHash = createCheckboxHash();
+	map.fire('moveend');
+}
+
+// check/uncheck all children of the given tristate checkbox
+function tristate_click(el) {
+	var newValue = el.checked;
+
+	var ul = el.parentNode.getElementsByTagName('ul')[0];
+
+	var checkboxes = ul.querySelectorAll('input[name^=ch]');
+	for (var j = 0; j < checkboxes.length; ++j) {
+		checkboxes[j].checked = newValue;
+	}
+
+	checkbox_click();
+}
+
+////////////////////////////////////////////////
+// setup
+///////////////////////////////////////////////
+
+var map;
+var checkboxHash;
+var highlight_error;
+
+function init(highlight) {
+	map = L.map('map', {maxZoom: 19});
+	map.addLayer(L.tileLayer('http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+		attribution: 'Map data &copy; OpenStreetMap contributors',
+		maxZoom: 19
+	}));
+
+	var errorLayer = L.layerGroup();
+	map.addLayer(errorLayer);
+	map.errorLayer = errorLayer;
+
+	var latlon = default_latlon;
+	var zoom = default_zoom;
+
+	var cookie = loadLocals();
+	if (cookie) {
+		if (cookie.latlon) latlon = cookie.latlon;
+		if (cookie.zoom) zoom = cookie.zoom;
+	}
+
+	// load userfilter from url hash if present
+	var args = splitHash();
+	if (args.length == 5 && args[4]) {
+		document.myform.userfilter.value = args[4];
+	}
+
+	var force_checked = {};
+	if (highlight) {
+		latlon = highlight.latlon;
+		zoom = highlight.zoom;
+		highlight_error = highlight.schema + '_' + highlight.error_id;
+		force_checked['ch' + highlight.error_type] = true;
+	}
+
+	map.setView(latlon, zoom);
+
+	L.hash(map);
+
+	initCheckboxes(force_checked);
+
+	map.on("moveend", function() {
+		updateErrors();
+		updateLinks();
+		saveLocals();
+	});
+
+	checkbox_click();
+}
+
+// variables only used in the browser are saved to localStorage here
+function saveLocals() {
+	var vars = {};
+	vars.latlon = map.getCenter().wrap();
+	vars.zoom = map.getZoom();
+	vars.checkHash = createCheckboxHash();
+
+	localStorage.setItem("cookie", JSON.stringify(vars));
+}
+
+// load variables from localStorage
+function loadLocals() {
+	var cookie = localStorage.getItem("cookie");
+	return cookie && JSON.parse(cookie);
+}
+
+// save the lang parameter to the cookie (lang is used server-side; can't save it to localStorage)
+function setLang(lang) {
+	var expiry = new Date();
+	expiry.setYear(expiry.getFullYear() + 10);
+
+	document.cookie = 'keepright_locale=' + lang + '; expires=' + expiry.toGMTString();
 }

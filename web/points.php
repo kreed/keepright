@@ -53,10 +53,16 @@ $where.=' AND lon >= ' . ($lon-3e6) . ' AND lon <= ' . ($lon+3e6);
 // lookup the schemas that have to be queried for the given coordinates for the center of screen
 $error_view = error_view_subquery($db1, $lon, $lat, $lon, $lat, $where);
 
+echo "{";
 
-echo "lat\tlon\terror_name\terror_type\tobject_type\tobject_type_EN\tobject_id\tobject_timestamp\tuser_name\tschema\terror_id\tdescription\tcomment\tstate\ticon\ticonSize\ticonOffset\tpartner_objects\n";
+$center_schema = find_schema($db1, $lat, $lon);
+$updated_date=get_updated_date($center_schema);
+echo '"updated": "' . $updated_date . '",';
+
+echo '"errors": {';
 
 if ($error_view=='') {
+	echo "]}";
 	mysqli_close($db1);
 	exit;
 }
@@ -80,7 +86,7 @@ if ($user) $sql.=' AND (e.user_name = ?)';
 
 $sql .= " ORDER BY POWER(lat-$lat,2)+POWER(lon-$lon,2)";
 //$sql .= " ORDER BY RAND()";
-$sql .= ' LIMIT 100';
+$sql .= ' LIMIT ' . $max_error_count;
 
 
 
@@ -90,18 +96,9 @@ if ($user) { mysqli_stmt_bind_param($stmt, 's', $user); }
 mysqli_stmt_execute($stmt);
 $result=mysqli_stmt_get_result($stmt);
 
-while ($row = mysqli_fetch_assoc($result)) {
+$comma=false;
 
-	switch($row['state']) {
-		case 'ignore_temporarily':
-			$filenr='angel';
-			break;
-		case 'ignore':
-			$filenr='devil';
-			break;
-		default:
-			$filenr=10*floor($row['error_type']/10);	// use icon 190 for types 191-199
-	}
+while ($row = mysqli_fetch_assoc($result)) {
 
 	if ($locale == 'en') {
 		$replacements = array('$1'=>$row['txt1'], '$2'=>$row['txt2'], '$3'=>$row['txt3'], '$4'=>$row['txt4'], '$5'=>$row['txt5']);
@@ -200,24 +197,31 @@ while ($row = mysqli_fetch_assoc($result)) {
 		$object_type = T_gettext($row['object_type']);
 	}
 
-	echo $row['la'] . "\t" .
-		$row['lo'] . "\t" .
-		$error_name . "\t" .
-		$row['error_type'] . "\t" .
-		$object_type . "\t" .
-		$row['object_type'] . "\t" .
-		$row['object_id'] . "\t" .
-		$row['object_timestamp'] . "\t" .
-		$row['user_name'] . "\t" .
-		$row['schema'] . "\t" .
-		$row['error_id'] . "\t" .
-		strtr($description, "\t", " ") . "\t" .
-		strtr($row['comment'], array("\t"=>" ", "\r\n"=>"<br>", "\n"=>"<br>")) . "\t" .
-		strtr($row['state'], array("\t"=>" ", 'ignore_temporarily'=>'ignore_t')) .
-		"\timg/zap" . $filenr . ".png".
-		"\t24,24\t1,-24\t".
-		$partner_objects . "\n";
+	if ($comma) echo ',';
+	else $comma = true;
+
+	$key = $row['schema'] . '_' . $row['error_id'];
+	echo "\"$key\":";
+	echo json_encode(array(
+		'lat'=>$row['la'],
+		'lon'=>$row['lo'],
+		'error_name'=>$error_name,
+		'error_type'=>$row['error_type'],
+		'object_type'=>$object_type,
+		'object_type_EN'=>$row['object_type'],
+		'object_id'=>$row['object_id'],
+		'object_timestamp'=>$row['object_timestamp'],
+		'user_name'=>$row['user_name'],
+		'schema'=>$row['schema'],
+		'error_id'=>$row['error_id'],
+		'description'=>$description,
+		'comment'=>$row['comment'],
+		'state'=>$row['state'],
+		'partner_objects'=>$partner_objects
+	));
 }
+
+echo '}}';
 
 mysqli_stmt_close($stmt);
 mysqli_close($db1);

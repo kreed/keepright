@@ -1,11 +1,38 @@
 
+body {
+	background: #f0fff0;
+}
 
-.p1 { margin:0px; margin-right:13px; border-style:solid; border-width:thin; border-color:#800000; background-color:#FF8080; }
+#map {
+	position:fixed;
+	left:20%;
+	top:0;
+	width:80%;
+	height:100%;
+}
 
-.p2 { margin:5px; padding-top:3px; padding-bottom:3px;}
+.leaflet-popup-content {
+	font: 1.2em serif;
+}
 
-.p3 { background-color:#FFFFD0; }
+.desc {
+	margin:0 !important;
+	border: #800 solid thin;
+	background: #F88;
+}
 
+.edit_links {
+	margin:8px 5px !important;
+}
+
+.leaflet-popup-content>form {
+	background: #FFD;
+}
+
+.footnote {
+	font-size: .8em;
+	margin: 0 !important;
+}
 
 #outline {
 	font-size: 0.7em;
