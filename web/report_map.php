@@ -158,33 +158,23 @@ foreach ($error_types as $et=>$e) {
 	$has_subtypes = is_array($subtypes[$et]);
 	if ($has_subtypes) $subgroup_counter++;
 
-	mkcheckbox($et, $e[1], $ch, !$has_subtypes, $subgroup_counter, $class);
+	mkcheckbox($et, $e[1], $ch, $has_subtypes, $class);
 
 	if ($has_subtypes) {
-		echo "<ul><div id='subgroup$subgroup_counter'>";
+		echo "<ul>";
 		foreach ($subtypes[$et] as $st=>$sn) {
 			echo "<li>";
 			mkcheckbox($st, $sn, $ch);
 			echo "</li>";
 		}
-		echo '</div></ul>';
+		echo '</ul>';
 	}
 
 	echo "</li>\n";
 }
 echo "</ul>\n";
 
-
-echo "<script type='text/javascript'>\n";
-for ($i=1;$i<=$subgroup_counter;$i++)
-	echo "\tinitTriStateCheckBox('tristateBox$i', 'subgroup$i', false, function() { checkbox_click(); } );\n";
-echo "</script>\n";
-
-
-
-
 echo "
-<input type='hidden' name='number_of_tristate_checkboxes' value='" . $subgroup_counter . "'>
 <input type='hidden' name='highlight_error_id' value='" . $highlight_error_id . "'>
 <input type='hidden' name='highlight_schema' value='" . $highlight_schema . "'>
 <input type='hidden' name='lat' value='" . $lat/1e7 . "'>
@@ -252,20 +242,25 @@ function mkurl($ch, $label, $lat, $lon, $zoom, $show_ign, $show_tmpign, $filenam
 
 // draws a checkbox with icon and label for a given error type and error name
 // checks the checkbox if applicable
-function mkcheckbox($et, $en, $ch, $draw_checkbox=true, $subgroup_counter=0, $class='error') {
+function mkcheckbox($et, $en, $ch, $tristate=false, $class='error') {
 	global $checks_selected, $checks_to_hide;
-	echo "\n\t<img border=0 height=12 src='img/zap" . 10*floor($et/10) . ".png' alt='error marker $et'>\n\t"; 			// use icon 190 for types 191-199
 
-	if ($draw_checkbox) {
-		echo "<input type='checkbox' id='ch$et' name='ch$et' value='1' class='$class' onclick='javascript:checkbox_click();'";
+	$img="img/zap" . 10*floor($et/10) . ".png"; // e.g. use icon 190 for types 191-199
+	echo "\n\t<img border=0 height=12 src='$img' alt='error marker $et'>\n\t";
 
-		if (($ch==='0' && $class==='error' && !in_array($et, $checks_to_hide)) || in_array($et, $checks_selected)) echo ' checked="checked"';
-
-		echo ">\n\t<label for='ch$et'>" . T_gettext($en) . "</label>\n";
-
+	$name='';
+	if ($tristate) {
+		$name="tristate$et";
+		echo "<input type='checkbox' id='$name' name='$name' onclick='javascript:tristate_click(this);'";
 	} else {
-		echo "<span id='tristateBox$subgroup_counter' style='cursor: default;'>&nbsp; " . T_gettext($en) . "</span>\n";
+		$name="ch$et";
+		echo "<input type='checkbox' id='$name' name='$name' class='$class' onclick='javascript:checkbox_click();'";
+
+		if (($ch==='0' && $class==='error' && !in_array($et, $checks_to_hide)) || in_array($et, $checks_selected))
+			echo ' checked="checked"';
 	}
+
+	echo ">\n\t<label for='$name'>" . T_gettext($en) . "</label>\n";
 }
 
 ?>
