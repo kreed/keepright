@@ -26,15 +26,28 @@
 	margin-left: 0px;
 }
 
-.olink {
-	border-style: none;
-	padding-right: 5px;
-}
-.oimg {
-	border-style: none;
-}
-
 body, form {
 	margin: 0;
 	padding: 0;
+}
+
+input[name^=tree] {
+	position: absolute;
+	opacity: 0;
+}
+
+input[name^=tree] + label {
+	content: url("img/oopen.png");
+}
+
+input[name^=tree]:checked + label {
+	content: url("img/oclose.png");
+}
+
+input[name^=tree] ~ ul {
+	display: none;
+}
+
+input[name^=tree]:checked ~ ul {
+	display: block;
 }

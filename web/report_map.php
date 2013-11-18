@@ -105,7 +105,7 @@ if ($cookie) $checks_to_hide = split(',', $cookie[3]); else $checks_to_hide=arra
 </script>
 </head>
 
-<body onload="init(); outlineInit(); " style="background-color:#f0fff0;">
+<body onload="init()" style="background-color:#f0fff0">
 
 <div style="font-size:0.7em; width:20%">
 <form name="myform" method="get" action="<?php echo $_SERVER['PHP_SELF']; ?>" onsubmit="checkbox_click(); return false">
@@ -245,10 +245,14 @@ function mkurl($ch, $label, $lat, $lon, $zoom, $show_ign, $show_tmpign, $filenam
 function mkcheckbox($et, $en, $ch, $tristate=false, $class='error') {
 	global $checks_selected, $checks_to_hide;
 
+	if ($tristate) {
+		echo "<input type='checkbox' name='tree$et'>";
+		echo "<label for='tree$et'></label>";
+	}
+
 	$img="img/zap" . 10*floor($et/10) . ".png"; // e.g. use icon 190 for types 191-199
 	echo "\n\t<img border=0 height=12 src='$img' alt='error marker $et'>\n\t";
 
-	$name='';
 	if ($tristate) {
 		$name="tristate$et";
 		echo "<input type='checkbox' id='$name' name='$name' onclick='javascript:tristate_click(this);'";
