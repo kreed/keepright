@@ -107,7 +107,7 @@ if ($cookie) $checks_to_hide = split(',', $cookie[3]); else $checks_to_hide=arra
 
 <body onload="init()" style="background-color:#f0fff0">
 
-<div style="font-size:0.7em; width:20%">
+<div id="outline">
 <form name="myform" method="get" action="<?php echo $_SERVER['PHP_SELF']; ?>" onsubmit="checkbox_click(); return false">
 
 <a href="<?php echo $path; ?>"><img border=0 src="keepright.png" height="80px" alt="keep-right logo"></a>&nbsp;
@@ -146,33 +146,40 @@ mysqli_free_result($result);
 
 
 $class='';
-echo "<ul class='outline'>\n";
+$class_counter=1;
+echo '<div>';
 foreach ($error_types as $et=>$e) {
 
 	if ($class!=$e[0]) {
-		echo "<li><i>" . T_gettext($e[0] . 's') ."</i></li>";
+		if ($class_counter != 1) echo "</ul></div><div>";
+
+		mkcheckbox(-$class_counter, $e[0] . 's', true);
+		echo "<ul>";
+
 		$class=$e[0];
+		$class_counter++;
 	}
 
 	echo "<li>";
 	$has_subtypes = is_array($subtypes[$et]);
 	if ($has_subtypes) $subgroup_counter++;
 
-	mkcheckbox($et, $e[1], $ch, $has_subtypes, $class);
+	mkcheckbox($et, $e[1], $has_subtypes, $class);
 
 	if ($has_subtypes) {
 		echo "<ul>";
 		foreach ($subtypes[$et] as $st=>$sn) {
 			echo "<li>";
-			mkcheckbox($st, $sn, $ch);
+			mkcheckbox($st, $sn);
 			echo "</li>";
 		}
 		echo '</ul>';
 	}
 
-	echo "</li>\n";
+	echo "</li>";
 }
-echo "</ul>\n";
+
+echo "</ul></div>";
 
 echo "
 <input type='hidden' name='highlight_error_id' value='" . $highlight_error_id . "'>
@@ -180,9 +187,6 @@ echo "
 <input type='hidden' name='lat' value='" . $lat/1e7 . "'>
 <input type='hidden' name='lon' value='" . $lon/1e7 . "'>
 <input type='hidden' name='zoom' value='$zoom'>
-
-<input type='button' value='" . T_gettext('all') . "' onClick='javascript:set_checkboxes(true); pois.loadText();'>
-<input type='button' value='" . T_gettext('none') . "' onClick='javascript:set_checkboxes(false); pois.loadText();'><br>
 
 <input type='checkbox' id='show_ign' name='show_ign' value='1' onclick='javascript:checkbox_click();' " . ($show_ign ? 'checked="checked"' : '') . "><label for='show_ign'>" . T_gettext('show ignored errors') . "</label><br>
 
@@ -242,26 +246,29 @@ function mkurl($ch, $label, $lat, $lon, $zoom, $show_ign, $show_tmpign, $filenam
 
 // draws a checkbox with icon and label for a given error type and error name
 // checks the checkbox if applicable
-function mkcheckbox($et, $en, $ch, $tristate=false, $class='error') {
-	global $checks_selected, $checks_to_hide;
+function mkcheckbox($et, $en, $tristate=false, $class='error') {
+	global $ch, $checks_selected, $checks_to_hide;
 
 	if ($tristate) {
-		echo "<input type='checkbox' name='tree$et'>";
-		echo "<label for='tree$et'></label>";
+		echo "<input type='checkbox' id='tree$et' name='tree$et'";
+		if ($et < 0) echo " checked";
+		echo "><label for='tree$et'></label>";
 	}
 
-	$img="img/zap" . 10*floor($et/10) . ".png"; // e.g. use icon 190 for types 191-199
-	echo "\n\t<img border=0 height=12 src='$img' alt='error marker $et'>\n\t";
+	if ($et >= 0) {
+		$img="img/zap" . 10*floor($et/10) . ".png"; // e.g. use icon 190 for types 191-199
+		echo "\n\t<img border=0 height=12 src='$img' alt='error marker $et'>\n\t";
+	}
 
 	if ($tristate) {
 		$name="tristate$et";
-		echo "<input type='checkbox' id='$name' name='$name' onclick='javascript:tristate_click(this);'";
+		echo "<input type='checkbox' id='$name' name='$name' onclick='javascript:tristate_click(this)'";
 	} else {
 		$name="ch$et";
-		echo "<input type='checkbox' id='$name' name='$name' class='$class' onclick='javascript:checkbox_click();'";
+		echo "<input type='checkbox' id='$name' name='$name' onclick='javascript:checkbox_click()'";
 
 		if (($ch==='0' && $class==='error' && !in_array($et, $checks_to_hide)) || in_array($et, $checks_selected))
-			echo ' checked="checked"';
+			echo ' checked';
 	}
 
 	echo ">\n\t<label for='$name'>" . T_gettext($en) . "</label>\n";

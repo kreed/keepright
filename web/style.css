@@ -7,23 +7,24 @@
 .p3 { background-color:#FFFFD0; }
 
 
+#outline {
+	font-size: 0.7em;
+	width: 20%;
+}
 
-
-.outline {
-	margin-left: 0px;
-	padding-left: 0px;
+#outline ul {
+	margin: 0;
+	padding: 0 0 0 16px;
 	list-style: none;
 }
 
-.outline ul {
-	margin-left: 0px;
-	padding-left: 35px;
-	list-style: none;
-}
-
-.outline li {
+#outline li {
 	cursor: auto;
 	margin-left: 0px;
+}
+
+#outline div>label {
+	font-style: italic;
 }
 
 body, form {
@@ -36,11 +37,11 @@ input[name^=tree] {
 	opacity: 0;
 }
 
-input[name^=tree] + label {
+input[name^=tree] + label:before {
 	content: url("img/oopen.png");
 }
 
-input[name^=tree]:checked + label {
+input[name^=tree]:checked + label:before {
 	content: url("img/oclose.png");
 }
 
@@ -50,4 +51,9 @@ input[name^=tree] ~ ul {
 
 input[name^=tree]:checked ~ ul {
 	display: block;
+}
+
+#outline li>img:first-child {
+	/* align non-tristate errors with tristate errors */
+	margin-left: 19px;
 }

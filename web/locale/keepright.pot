@@ -1073,14 +1073,6 @@ msgstr ""
 msgid "warnings"
 msgstr ""
 
-#: report_map.php:182
-msgid "all"
-msgstr ""
-
-#: report_map.php:183
-msgid "none"
-msgstr ""
-
 #: report_map.php:185
 msgid "show ignored errors"
 msgstr ""

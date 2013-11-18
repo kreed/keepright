@@ -932,25 +932,6 @@ function closeBubble(schema, error_id) {
 	feature.marker.events.triggerEvent("mousedown");
 }
 
-// check/uncheck all checkboxes for error type selection
-function set_checkboxes(new_value) {
-
-	// update all the checkboxes
-	var checkboxes = document.myform.getElementsByTagName('input');
-	for (var i = 0; i < checkboxes.length; ++i) {
-		var el=checkboxes[i];
-		if (el.type == "checkbox" && el.name.match(/ch[0-9]+/) != null
-				// uncheck warnings for 'none', but don't check them for 'all'
-				&& (new_value == false || el.className.indexOf('warning') < 0)) {
-			el.checked=new_value;
-		}
-	}
-
-	plnk.updateLink();
-	updateTristates();
-}
-
-
 function updateCookie() {
 	var pos = map.getCenter().clone();
 	var lonlat = pos.transform(map.getProjectionObject(),
@@ -1040,7 +1021,7 @@ function tristate_click(el) {
 
 	var ul = el.parentNode.getElementsByTagName('ul')[0];
 
-	var checkboxes = ul.getElementsByTagName('input');
+	var checkboxes = ul.querySelectorAll('input[name^=ch]');
 	for (var j = 0; j < checkboxes.length; ++j) {
 		checkboxes[j].checked = newValue;
 	}
@@ -1071,46 +1052,44 @@ function getURL_checkboxes(includeVariableName, listActiveCheckboxes) {
 		loc="0";
 	}
 
-	// append error types for any checked checkbox that is called "ch[0-9]+"
-	for (var i = 0; i < document.myform.elements.length; ++i) {
-		var el=document.myform.elements[i];
-		if (el.type == "checkbox" && el.name.match(/ch[0-9]+/) != null) {
-			if (el.checked == listActiveCheckboxes)
-				loc+="," + el.name.substr(2);
-		}
+	// append error types for any checked checkbox that is called "ch..."
+	var checkboxes = document.myform.querySelectorAll('input[name^=ch]');
+	for (var i = 0; i < checkboxes.length; ++i) {
+		var el = checkboxes[i];
+		if (el.checked == listActiveCheckboxes)
+			loc+="," + el.name.substr(2);
 	}
 	return loc;
 }
 
 function updateTristates() {
-	for (var i = 0; i < document.myform.elements.length; ++i) {
-		var el = document.myform.elements[i];
-		// find tristate checkbox
-		if (el.type == "checkbox" && el.name.match(/tristate[0-9]+/) != null) {
-			// find list of subtypes
-			var ul = el.parentNode.getElementsByTagName('ul')[0];
+	var tristates = document.myform.querySelectorAll('input[name^=tristate]');
+	for (var i = 0; i < tristates.length; ++i) {
+		var el = tristates[i];
 
-			// loop through all subtypes, determine if all are checked or unchecked
-			var checkboxes = ul.getElementsByTagName('input');
-			var allChecked = true;
-			var allUnchecked = true;
-			for (var j = 0; j < checkboxes.length; ++j) {
-				if (checkboxes[j].checked) {
-					allUnchecked = false;
-				} else {
-					allChecked = false;
-				}
-			}
+		// find list of subtypes
+		var ul = el.parentNode.getElementsByTagName('ul')[0];
 
-			// update the tristate checkbox
-			el.indeterminate = false;
-			if (allChecked) {
-				el.checked = true;
-			} else if (allUnchecked) {
-				el.checked = false;
+		// loop through all subtypes, determine if all are checked or unchecked
+		var checkboxes = ul.querySelectorAll('input[name^=ch]');
+		var allChecked = true;
+		var allUnchecked = true;
+		for (var j = 0; j < checkboxes.length; ++j) {
+			if (checkboxes[j].checked) {
+				allUnchecked = false;
 			} else {
-				el.indeterminate = true;
+				allChecked = false;
 			}
+		}
+
+		// update the tristate checkbox
+		el.indeterminate = false;
+		if (allChecked) {
+			el.checked = true;
+		} else if (allUnchecked) {
+			el.checked = false;
+		} else {
+			el.indeterminate = true;
 		}
 	}
 }
