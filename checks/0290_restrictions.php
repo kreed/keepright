@@ -170,7 +170,7 @@ foreach (array('from', 'to') as $type) {
 	query("
 		INSERT INTO _tmp_errors (error_type, object_type, object_id, lat, lon, msgid, txt1, txt2, last_checked)
 		SELECT $error_type+5, CAST('relation' AS type_object_type),
-		r.relation_id, r.via_lat, r.via_lon,
+		r.relation_id, 1e7*r.via_lat, 1e7*r.via_lon,
 		'via (node #$1) is not the first or the last member of $type (way #$2)',
 		r.via_id, r.${type}_id,
 		NOW()
@@ -184,7 +184,7 @@ foreach (array('from', 'to') as $type) {
 query("
 	INSERT INTO _tmp_errors (error_type, object_type, object_id, lat, lon, msgid, txt1, txt2, last_checked)
 	SELECT $error_type+6, CAST('relation' AS type_object_type),
-	ii.relation_id, ii.via_lat, ii.via_lon,
+	ii.relation_id, 1e7*ii.via_lat, 1e7*ii.via_lon,
 	'restriction type is $1, but angle is $2. Maybe the restriction type is not appropriate?',
 	ii.restriction_type, ii.d,
 	NOW()
@@ -235,7 +235,7 @@ WHERE
 query("
 	INSERT INTO _tmp_errors (error_type, object_type, object_id, lat, lon, msgid, txt1, last_checked)
 	SELECT $error_type+7, CAST('relation' AS type_object_type),
-	ii.relation_id, ii.via_lat, ii.via_lon,
+	ii.relation_id, 1e7*ii.via_lat, 1e7*ii.via_lon,
 	'wrong direction of to way $1',
 	ii.to_id, NOW() FROM (
 
@@ -259,7 +259,7 @@ query("
 query("
 	INSERT INTO _tmp_errors (error_type, object_type, object_id, lat, lon, msgid, txt1, last_checked)
 	SELECT $error_type+8, CAST('relation' AS type_object_type),
-	ii.relation_id, ii.via_lat, ii.via_lon,
+	ii.relation_id, 1e7*ii.via_lat, 1e7*ii.via_lon,
 	'entry already prohibited by oneway tag on $1',
 	ii.to_id, NOW() FROM (
 
