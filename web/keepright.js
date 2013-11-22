@@ -188,47 +188,6 @@ function updateErrors() {
 	ajax.send(null);
 }
 
-function createErrorMarker(id, e) {
-	var icon = makeIcon(e.error_type, e.state);
-	var marker = new HoverMarker(new L.LatLng(e.lat, e.lon), {icon: icon});
-
-	marker.error_id = id;
-
-	var html = '<h5>'+e.error_name+', '+e.object_type+' <a href="http://www.openstreetmap.org/browse/'+e.object_type_EN+'/'+e.object_id+'" target="_blank">'+e.object_id+'</a></h5>'+
-	'<p class="desc">'+e.description+'</p>'+
-	'<p class="edit_links">' +
-	txt4+' <a href="http://localhost:8111/load_and_zoom?left=' + (e.lon-0.001) + '&right=' + (e.lon-(-0.001)) + '&top=' + (e.lat-(-0.001)) + '&bottom=' + (e.lat-0.001) + '&select=' + e.object_type_EN + e.object_id + e.partner_objects +'&zoom_mode=download" target="hiddenIframe" title="'+txt6+'">'+txt5+'</a> ' +
-	'<a href="http://www.openstreetmap.org/edit?lat=' + e.lat + '&lon=' + e.lon + '&zoom=18" target="_blank">'+txt7+'</a> ' +
-	'</p>' +
-
-	'<form name="errfrm_'+ id +'" target="hiddenIframe" method="get" action="comment.php" onsubmit="onPopupSubmit(\'' + id +  '\',' + e.error_type + ')">' +
-	'<input type="radio" id="st_' + id +'_n" '+(e.state!='ignore_temporarily' && e.state!='ignore' ? 'checked="checked"' :'')+' name="st" value="">'+
-	'<label for="st_' + id + '_n">'+txt8+'</label><br>'+
-	'<input type="radio" id="st_' + id +'_t" '+(e.state=='ignore_temporarily' ? 'checked="checked"' :'')+' name="st" value="ignore_temporarily">'+
-	'<label for="st_' + id +'_t">'+txt9+'</label><br>'+
-	'<input type="radio" id="st_' + id +'_i" '+(e.state=='ignore' ? 'checked="checked"' :'')+' name="st" value="ignore">'+
-	'<label for="st_' + id +'_i">'+txt10+'</label><br>'+
-	'<textarea cols="25" rows="2" name="co">'+(e.comment || '')+'</textarea>'+
-	'<input type="hidden" name="schema" value="'+e.schema+'">'+
-	'<input type="hidden" name="id" value="'+e.error_id+'">'+
-	'<br>'+
-	'<input type="submit" value="'+txt11+'">' +
-	'<input type="button" value="'+txt12+'" onClick="javascript:map.closePopup()">' +
-	'</form>' +
-
-	'<p class="footnote">' +
-	txt13 + '<br>' +
-	txt14 + '<a href="report_map.php?schema='+e.schema+'&error='+e.error_id+'">'+e.error_id+'</a><br>' +
-	txt15 + ' ' + e.object_type + ': <a href="http://www.openstreetmap.org/user/' + e.user_name + '" target="_blank">' + e.user_name + '</a> ' + e.object_timestamp +
-	'</p>';
-
-	marker.bindPopup(html, {
-		autoPan: false // auto pan doesn't work well with hover popups
-	});
-
-	return marker;
-}
-
 function errorsLoaded(e) {
 	var response = JSON.parse(this.responseText);
 	var errorsToAdd = response.errors;
@@ -245,7 +204,7 @@ function errorsLoaded(e) {
 
 	// create new markers
 	for (var e in errorsToAdd) {
-		map.errorLayer.addLayer(createErrorMarker(e, errorsToAdd[e]));
+		map.errorLayer.addLayer(new ErrorMarker(e, errorsToAdd[e]));
 	}
 
 	if (highlight_error) {
@@ -272,25 +231,14 @@ function getMarkerForError(error_id) {
 }
 
 function onPopupSubmit(error_id, error_type) {
-	var form = document['errfrm_' + error_id];
-	var state = form.querySelector('input[name=st]:checked').value;
 	var marker = getMarkerForError(error_id);
-	if (marker) marker.setIcon(makeIcon(error_type, state));
+	if (marker) {
+		var form = document['errfrm_' + error_id];
+		marker.error_data.state = form.querySelector('input[name=st]:checked').value;
+		marker.error_data.comment = form.co.value;
+		marker.setErrorData(marker.error_id, marker.error_data);
+	}
 	map.closePopup();
-}
-
-function makeIcon(error_type, state) {
-	var img = 'img/';
-	if (state == 'ignore_temporarily') img += 'zapangel.png';
-	else if (state == 'ignore') img += 'zapangel.png';
-	else img += 'zap' + (error_type / 10 >> 0) * 10 + '.png';
-
-	return L.icon({
-		iconUrl: img,
-		iconSize: [24, 24],
-		iconAnchor: [1, 23],
-		popupAnchor: [12, -23]
-	});
 }
 
 // build the list of error type checkbox states for use in URLs
@@ -312,9 +260,27 @@ function getURL_checkboxes() {
 // is hovered over. the popup will close when the mouse is moved
 // away unless the marker is "focused" by clicking on it
 //
+// also contains code to dynamically generate popup content from error data
+//
 // inspired by https://gist.github.com/sowelie/5099663
-var HoverMarker = L.Marker.extend({
-	bindPopup: function(htmlContent, options) {
+var ErrorMarker = L.Marker.extend({
+	initialize: function(error_id, error_data) {
+		L.Marker.prototype.initialize.apply(this, [new L.LatLng(error_data.lat, error_data.lon)]);
+		this.setErrorData(error_id, error_data);
+		this.bindPopup();
+	},
+
+	setErrorData: function(id, data) {
+		this.error_id = id;
+		this.error_data = data;
+		this.updateIcon();
+	},
+
+	bindPopup: function() {
+		var htmlContent = ""; // created in openPopup()
+		var options = {
+			autoPan: false // we disable autoPan for hovering and use it only when the marker is clicked
+		};
 		L.Marker.prototype.bindPopup.apply(this, [htmlContent, options]);
 
 		// override click handler with our own version that sets the
@@ -353,10 +319,68 @@ var HoverMarker = L.Marker.extend({
 		this.focused = true;
 
 		// pan the map so that the popup is in view
-		var tmp = this._popup.options.autoPan;
 		this._popup.options.autoPan = true;
 		this._popup._adjustPan();
-		this._popup.options.autoPan = tmp;
+		this._popup.options.autoPan = false;
+	},
+
+	openPopup: function() {
+		this._popup.setContent(this.createPopupContent(this.error_id, this.error_data));
+		L.Marker.prototype.openPopup.apply(this);
+	},
+
+	updateIcon: function() {
+		var img = 'img/';
+		var state = this.error_data.state;
+		if (state == 'ignore_temporarily') {
+			img += 'zapangel.png';
+		} else if (state == 'ignore') {
+			img += 'zapdevil.png';
+		} else {
+			img += 'zap' + (this.error_data.error_type / 10 >> 0) * 10 + '.png';
+		}
+
+		this.setIcon(L.icon({
+			iconUrl: img,
+			iconSize: [24, 24],
+			iconAnchor: [1, 23],
+			popupAnchor: [12, -23]
+		}));
+	},
+
+	createPopupContent: function() {
+		var id = this.error_id;
+		var e = this.error_data;
+
+		var html = '<h5>'+e.error_name+', '+e.object_type+' <a href="http://www.openstreetmap.org/browse/'+e.object_type_EN+'/'+e.object_id+'" target="_blank">'+e.object_id+'</a></h5>'+
+		'<p class="desc">'+e.description+'</p>'+
+		'<p class="edit_links">' +
+		txt4+' <a href="http://localhost:8111/load_and_zoom?left=' + (e.lon-0.001) + '&right=' + (e.lon-(-0.001)) + '&top=' + (e.lat-(-0.001)) + '&bottom=' + (e.lat-0.001) + '&select=' + e.object_type_EN + e.object_id + e.partner_objects +'&zoom_mode=download" target="hiddenIframe" title="'+txt6+'">'+txt5+'</a> ' +
+		'<a href="http://www.openstreetmap.org/edit?lat=' + e.lat + '&lon=' + e.lon + '&zoom=18" target="_blank">'+txt7+'</a> ' +
+		'</p>' +
+
+		'<form name="errfrm_'+ id +'" target="hiddenIframe" method="get" action="comment.php" onsubmit="onPopupSubmit(\'' + id +  '\',' + e.error_type + ')">' +
+		'<input type="radio" id="st_' + id +'_n" '+(e.state!='ignore_temporarily' && e.state!='ignore' ? 'checked="checked"' :'')+' name="st" value="">'+
+		'<label for="st_' + id + '_n">'+txt8+'</label><br>'+
+		'<input type="radio" id="st_' + id +'_t" '+(e.state=='ignore_temporarily' ? 'checked="checked"' :'')+' name="st" value="ignore_temporarily">'+
+		'<label for="st_' + id +'_t">'+txt9+'</label><br>'+
+		'<input type="radio" id="st_' + id +'_i" '+(e.state=='ignore' ? 'checked="checked"' :'')+' name="st" value="ignore">'+
+		'<label for="st_' + id +'_i">'+txt10+'</label><br>'+
+		'<textarea cols="25" rows="2" name="co">'+(e.comment || '')+'</textarea>'+
+		'<input type="hidden" name="schema" value="'+e.schema+'">'+
+		'<input type="hidden" name="id" value="'+e.error_id+'">'+
+		'<br>'+
+		'<input type="submit" value="'+txt11+'">' +
+		'<input type="button" value="'+txt12+'" onClick="javascript:map.closePopup()">' +
+		'</form>' +
+
+		'<p class="footnote">' +
+		txt13 + '<br>' +
+		txt14 + '<a href="report_map.php?schema='+e.schema+'&error='+e.error_id+'">'+e.error_id+'</a><br>' +
+		txt15 + ' ' + e.object_type + ': <a href="http://www.openstreetmap.org/user/' + e.user_name + '" target="_blank">' + e.user_name + '</a> ' + e.object_timestamp +
+		'</p>';
+
+		return html;
 	}
 });
 
