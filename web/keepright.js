@@ -528,24 +528,20 @@ var checkboxHash;
 var highlight_error;
 
 function init(highlight) {
-	map = L.map('map', {maxZoom: 19});
-	map.addLayer(L.tileLayer('http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-		attribution: 'Map data &copy; OpenStreetMap contributors',
-		maxZoom: 19
-	}));
-
-	var errorLayer = L.layerGroup();
-	map.addLayer(errorLayer);
-	map.errorLayer = errorLayer;
+	map = L.map('map', { maxZoom: 19 });
 
 	var latlon = default_latlon;
 	var zoom = default_zoom;
+	var activeLayer;
 
 	var cookie = loadLocals();
 	if (cookie) {
 		if (cookie.latlon) latlon = cookie.latlon;
 		if (cookie.zoom) zoom = cookie.zoom;
+		if (cookie.activeLayer) activeLayer = cookie.activeLayer;
 	}
+
+	initMapLayers(activeLayer);
 
 	// load userfilter from url hash if present
 	var args = splitHash();
@@ -561,11 +557,10 @@ function init(highlight) {
 		force_checked['ch' + highlight.error_type] = true;
 	}
 
-	map.setView(latlon, zoom);
+	initCheckboxes(force_checked);
 
 	L.hash(map);
-
-	initCheckboxes(force_checked);
+	map.setView(latlon, zoom);
 
 	map.on("moveend", function() {
 		updateErrors();
@@ -576,12 +571,71 @@ function init(highlight) {
 	checkbox_click();
 }
 
+var mapLayers = {
+	osm: {
+		displayName: 'OpenStreetMap.org',
+		url: 'http://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+		attribution: 'Map data &copy; <a href="http://www.openstreetmap.org/copyright/en">OpenStreetMap</a> contributors',
+		maxZoom: 19
+	},
+	mapquest: {
+		displayName: "MapQuest Open",
+		url: "http://otile{s}.mqcdn.com/tiles/1.0.0/osm/{z}/{x}/{y}.png",
+		attribution: 'Data &copy; <a href="http://www.openstreetmap.org/copyright/en">OpenStreetMap</a> contributors, Tiles &copy; <a href="http://open.mapquest.com/">MapQuest</a>',
+		subdomains: "1234",
+		maxZoom: 19,
+		maxNativeZoom: 18
+	},
+	transport: {
+		displayName: "Thunderforest Transport",
+		url: "http://{s}.tile.thunderforest.com/transport/{z}/{x}/{y}.png",
+		attribution: 'Data &copy; <a href="http://www.openstreetmap.org/copyright/en">OpenStreetMap</a> contributors, Tiles &copy; <a href="http://www.thunderforest.com/">Andy Allan</a>',
+		maxZoom: 19,
+		maxNativeZoom: 18
+	}
+}
+
+function initMapLayers(activeLayer) {
+	var custom = localStorage.getItem("customLayer");
+	if (custom) {
+		custom = JSON.parse(custom);
+		if (!custom.displayName) custom.displayName = "Custom";
+		mapLayers.custom = custom;
+	}
+
+	var baseLayers = {};
+	var active;
+
+	for (var i in mapLayers) {
+		var options = mapLayers[i];
+		var layer = L.tileLayer(options.url, options);
+		layer.id = i;
+		baseLayers[options.displayName] = layer;
+		if (!active || activeLayer == i) active = layer;
+	}
+
+	L.control.layers(baseLayers).addTo(map);
+	map.addLayer(active);
+	map.on('baselayerchange', saveLocals);
+
+	var errorLayer = L.layerGroup();
+	map.addLayer(errorLayer);
+	map.errorLayer = errorLayer;
+}
+
 // variables only used in the browser are saved to localStorage here
 function saveLocals() {
 	var vars = {};
 	vars.latlon = map.getCenter().wrap();
 	vars.zoom = map.getZoom();
 	vars.checkHash = createCheckboxHash();
+
+	for (var e in map._layers) {
+		var layer = map._layers[e];
+		if (layer.id) {
+			vars.activeLayer = layer.id;
+		}
+	}
 
 	localStorage.setItem("cookie", JSON.stringify(vars));
 }
