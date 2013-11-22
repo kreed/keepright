@@ -39,16 +39,12 @@ if (isset($_GET['f'])) {
 
 
 
-require('webconfig.inc.php');
 require('helpers.inc.php');
-require('BufferedInserter_MySQL.php');
 
 //echo "db_name is $db_name <br>";
 
-$db1=mysqli_connect($db_host, $db_user, $db_pass, $db_name);
+$db=db_connect();
 
-load_dump($db1, $file, $argv[3]);
-
-mysqli_close($db1);
+load_dump($db, $file, $argv[3]);
 
 ?>

@@ -2,7 +2,6 @@
 <html>
 
 <?php
-require('webconfig.inc.php');
 require('helpers.inc.php');
 
 
@@ -53,11 +52,11 @@ printf(T_gettext("If you want to export errors from KeepRight you will want to h
 echo '<h3>' . T_gettext('logfile') . '</h3>';
 
 
-$db1=mysqli_connect($db_host, $db_user, $db_pass, $db_name);
-mysqli_query($db1, "SET SESSION wait_timeout=60");
+$db=db_connect();
+$db->query("SET SESSION wait_timeout=60");
 
 // fetch announcements from db
-announcements($db1, 0);
+announcements($db, 0);
 
 echo '<br><br>';
 printf(T_gettext('For archeologists: %sOld log entries%s have moved.'), "<a href='logs.php'>", '</a>');
@@ -74,19 +73,13 @@ echo '<h3>' . T_gettext('Currently the following checking procedures are impleme
 
 
 
-$result=query("
-	SELECT error_type, error_name, error_description
+$sql="SELECT error_type, error_name, error_description
 	FROM $error_types_name
 	WHERE hidden=0 AND error_type=10*FLOOR(error_type/10)
-	ORDER BY error_type
-", $db1, false);
-while ($row = mysqli_fetch_array($result, MYSQL_ASSOC)) {
+	ORDER BY error_type";
+foreach ($db->query($sql) as $row) {
 	echo '<p><b>' . T_gettext($row['error_name']) . '</b><br>' . T_gettext($row['error_description']) . '</p>';
 }
-
-mysqli_free_result($result);
-mysqli_close($db1);
-
 
 
 echo T_gettext('If you find an error in my errors lists I would definitely like to hear about it!') . '<br>';

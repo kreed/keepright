@@ -1,10 +1,10 @@
 <?php
 
-require('webconfig.inc.php');
 require('helpers.inc.php');
 
-$db1=mysqli_connect($db_host, $db_user, $db_pass, $db_name);
-mysqli_query($db1, "SET SESSION wait_timeout=60");
+$db=db_connect();
+$db->query("SET SESSION wait_timeout=60");
+
 ?>
 <!DOCTYPE html>
 <html>
@@ -31,13 +31,11 @@ $subgroup_counter=0;
 $error_types=array();
 $subtypes = array();
 
-$result=mysqli_query($db1, "
-	SELECT error_type, error_name, error_class, hidden
+$sql = "SELECT error_type, error_name, error_class, hidden
 	FROM $error_types_name
-	ORDER BY error_class, error_type
-");
+	ORDER BY error_class, error_type";
 
-while ($row = mysqli_fetch_array($result)) {
+foreach ($db->query($sql) as $row) {
 	$et = $row['error_type'];
 	$main_type=10*floor($et/10);
 
@@ -50,7 +48,6 @@ while ($row = mysqli_fetch_array($result)) {
 		}
 	}
 }
-mysqli_free_result($result);
 
 $class='';
 $class_counter=1;
@@ -183,18 +180,14 @@ if ($schema && $error_id) {
 	$lon=0;
 
 	$schema=preg_replace("/[^A-Za-z0-9 ]/", '', $schema);
-	$stmt=mysqli_prepare($db1, "SELECT lat, lon, error_type FROM error_view_$schema WHERE error_id = ? LIMIT 1;");
-	mysqli_stmt_bind_param($stmt, 's', $error_id);
-	mysqli_stmt_execute($stmt);
-
-	$result=mysqli_stmt_get_result($stmt);
-	while ($row = mysqli_fetch_array($result)) {
+	$stmt=$db->prepare("SELECT lat, lon, error_type FROM error_view_$schema WHERE error_id = ? LIMIT 1;");
+	$stmt->execute([$error_id]);
+	foreach ($stmt as $row) {
 		$lat=$row['lat'] / 10e6;
 		$lon=$row['lon'] / 10e6;
 		$zoom=17;
 		$error_type=$row['error_type'];
 	}
-	mysqli_free_result($result);
 
 	if ($lat && $lon) {
 		$highlight_error="{schema: '$schema', error_id: $error_id, latlon: [$lat, $lon], zoom: $zoom, error_type: $error_type}";
@@ -206,7 +199,3 @@ echo "init($highlight_error);\n";
 </script>
 </body>
 </html>
-
-<?php
-mysqli_close($db1);
-?>

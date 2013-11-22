@@ -1,22 +1,30 @@
 <?php
 
+require('webconfig.inc.php');
 
+// open db connection using settings in webconfig.inc.php
+function db_connect() {
+	global $db_dsn, $db_user, $db_pass, $db_opts;
+	return new PDO($db_dsn, $db_user, $db_pass, $db_opts);
+}
 
-// execute $sql using database link $link
+// execute $sql using database link $db
 // echo debug messages if $debug is set
-function query($sql, $link, $debug=true) {
+function query($sql, $db, $debug=true) {
 	if ($debug) {
 		echo "\n\n" . rtrim(preg_replace('/(\s)\s+/', '$1', $sql)) . "\n";
 		$starttime=microtime(true);
 	}
-	//$result=mysql_unbuffered_query($sql, $link);
-	$result=mysqli_query($link, $sql, MYSQLI_USE_RESULT);
-	if (!$result) {
-		$message  = 'Invalid query: ' . mysqli_errno($link) . ": " . mysqli_error($link) . "\n";
+
+	try {
+		$result=$db->query($link, $sql, MYSQLI_USE_RESULT);
+	} catch (PDOException $e) {
+		$message  = 'Invalid query: ' . $e->getMessage() . "\n";
 		$message .= 'Whole query: ' . $sql . "\n";
 		$message .= 'Query result: ' . $result . "\n";
 		echo($message);
 	}
+
 	if ($debug) echo format_time(microtime(true)-$starttime) ."\n";
 	return $result;
 }
@@ -51,28 +59,24 @@ function content($filename) {
 
 // select all error types where sub-types exist
 // return the list of error types and their names
-function get_subtyped_error_types($db1, $ch) {
+function get_subtyped_error_types($db, $ch) {
 	global $error_types_name;
 
 	$subtyped_array = array();
 	$subtyped_names_array = array();
 
-	$result=mysqli_query($db1, "
-		SELECT 10*floor(et1.error_type/10) AS error_type, error_name
+	$sql = "SELECT 10*floor(et1.error_type/10) AS error_type, error_name
 		FROM $error_types_name et1
 		WHERE EXISTS (
 			SELECT error_type
 			FROM $error_types_name et2
 			WHERE et2.error_type BETWEEN et1.error_type+1 AND et1.error_type+9
 		)
-		AND et1.error_type MOD 10 = 0
-	");
-	while ($row = mysqli_fetch_assoc($result)) {
+		AND et1.error_type MOD 10 = 0";
+	foreach ($db->query($sql) as $row) {
 		$subtyped_array[] = $row['error_type'];
 		$subtyped_names_array[$row['error_type']] = $row['error_name'];
 	}
-	mysqli_free_result($result);
-
 
 	// add criteria for selecting error types
 	$error_types=explode(',', addslashes($ch));
@@ -97,46 +101,33 @@ function get_subtyped_error_types($db1, $ch) {
 // check out which schemas to query for given area.
 // and return a UNION query with an arbitrary WHERE part.
 // for querying just a point (lat/lon) specify top==bottom and left==right
-function error_view_subquery($db1, $left, $top, $right, $bottom, $where='TRUE'){
-
+function error_view_subquery($db, $left, $top, $right, $bottom, $where='TRUE'){
 	// lookup the schemas that have to be queried for the given coordinates
 	$error_view='';
-	$result=mysqli_query($db1, "
-		SELECT `schema` AS s
+
+	$sql = "SELECT `schema` AS s
 		FROM `schemata`
 		WHERE `left_padded`<=$right/1e7 AND `right_padded`>=$left/1e7
-			AND `top_padded`>=$bottom/1e7 AND `bottom_padded`<=$top/1e7
-	");
-	while ($row = mysqli_fetch_assoc($result)) {
-
+		AND `top_padded`>=$bottom/1e7 AND `bottom_padded`<=$top/1e7";
+	foreach ($db->query($sql) as $row) {
 		$error_view.=' SELECT * FROM error_view_' . $row['s'] .
 			" WHERE $where UNION ALL " ;
-
 	}
-	mysqli_free_result($result);
 	return substr($error_view, 0, -11);
 }
 
 
 
-function find_schema($db1, $lat, $lon) {
-
-	$schema='0';
-
-	$result=mysqli_query($db1, "
-		SELECT `schema` AS s
+function find_schema($db, $lat, $lon) {
+	$sql = "SELECT `schema` AS s
 		FROM `schemata`
 		WHERE `left`<=$lon/1e7 AND `right`>=$lon/1e7
 			AND `top`>=$lat/1e7 AND `bottom`<=$lat/1e7
-		LIMIT 1
-	");
-	while ($row = mysqli_fetch_assoc($result)) {
-
-		$schema = $row['s'];
-
+		LIMIT 1";
+	foreach ($db->query($sql) as $row) {
+		return $row['s'];
 	}
-	mysqli_free_result($result);
-	return $schema;
+	return '0';
 }
 
 
@@ -157,17 +148,14 @@ function language_selector() {
 
 // print out announcements for the web landing page
 // parameter $show_archived_entries (0|1) selects current or archived entries
-function announcements($db1, $show_archived_entries) {
-	$result=query("
-		SELECT subject, body, COALESCE( txt1, '') AS txt1,
+function announcements($db, $show_archived_entries) {
+	$sql = "SELECT subject, body, COALESCE( txt1, '') AS txt1,
 			COALESCE( txt2, '') AS txt2, COALESCE( txt3, '') AS txt3
 		FROM announce
 		WHERE visible<>0 AND archived=" . $show_archived_entries . "
-		ORDER BY ID DESC
-	", $db1, false);
+		ORDER BY ID DESC";
 
-	while ($row = mysqli_fetch_array($result, MYSQL_ASSOC)) {
-
+	foreach ($db->query($sql) as $row) {
 		$body=strtr(T_gettext($row['body']),
 			array(	'$1'=>T_gettext($row['txt1']),
 				'$2'=>T_gettext($row['txt2']),
@@ -177,7 +165,5 @@ function announcements($db1, $show_archived_entries) {
 
 		echo '<h4>' . T_gettext($row['subject']) . "</h4><p>$body</p>\n";
 	}
-
-	mysqli_free_result($result);
 }
 ?>

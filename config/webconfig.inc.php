@@ -2,11 +2,12 @@
 
 // config file for webserver db credentials
 
-$db_host="localhost";
+$db_dsn="mysql:host=localhost;dbname=osm_EU"; // PDO DSN
 $db_user="root";
 $db_pass="haraldk";
-$db_name="osm_EU";
-// $db_name is the name of the physical database on the MySQL server for connecting
+$db_opts=array(
+	PDO::MYSQL_ATTR_LOCAL_INFILE => true
+);
 
 $error_types_name='error_types';
 $comments_name='comments';

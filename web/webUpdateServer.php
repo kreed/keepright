@@ -19,11 +19,11 @@ ini_set('session.use_only_cookies', 0);	// never use cookies
 ini_set('session.gc_maxlifetime', 1800);// 30 minutes as max. session lifetime
 session_cache_limiter('nocache');	// disallow caching this page for proxies
 
-require('webconfig.inc.php');
 require('helpers.inc.php');
-require('BufferedInserter_MySQL.php');
 
 session_start();
+
+$db=db_connect();
 
 $user=$USERS[$_GET['username']];
 
@@ -79,9 +79,7 @@ if ($_SESSION['authorized']===true) {
 			unlink($fname);
 		}
 
-		$db1=mysqli_connect($db_host, $db_user, $db_pass, $db_name);
-		toggle_tables1($db1, $schema);
-		mysqli_close($db1);
+		toggle_tables1($db, $schema);
 	}
 
 	if ($_GET['cmd'] == 'load_dump') {		// load one part of the dump file (call repeatedly in case the dump file has more than one part
@@ -96,9 +94,7 @@ if ($_SESSION['authorized']===true) {
 			exit;
 		}
 
-		$db1=mysqli_connect($db_host, $db_user, $db_pass, $db_name);
-		load_dump($db1, $error_view_filename, 'error_view', $schema);
-		mysqli_close($db1);
+		load_dump($db, $error_view_filename, 'error_view', $schema);
 	}
 
 	if ($_GET['cmd'] == 'finish_update') {		// toggle back tables, make shadow table visible
@@ -107,28 +103,20 @@ if ($_SESSION['authorized']===true) {
 			die("you are not authorized to access schema $schema\n");
 		}
 
-		$db1=mysqli_connect($db_host, $db_user, $db_pass, $db_name);
-
-		toggle_tables2($db1, $schema);
-		reopen_errors($db1, $schema);
+		toggle_tables2($db, $schema);
+		reopen_errors($db, $schema);
 
 		// set_updated_date
 		write_file("updated_$schema", addslashes($_GET['updated_date']));
-
-		mysqli_close($db1);
 	}
 
 	if ($_GET['cmd'] == 'export_comments') {
-		$db1=mysqli_connect($db_host, $db_user, $db_pass, $db_name);
-		export_comments($db1);
-		mysqli_close($db1);
+		export_comments($db);
 	}
 
 
 	if ($_GET['cmd'] == 'get_state') {
-		$db1=mysqli_connect($db_host, $db_user, $db_pass, $db_name);
-		get_state($db1);
-		mysqli_close($db1);
+		get_state($db);
 	}
 
 
@@ -158,24 +146,21 @@ function permissions($user, $schema) {
 }
 
 // create a dump file containing all comments
-function export_comments($db1) {
+function export_comments($db) {
 	global $comments_name;
 	$fname=$comments_name . '.txt';
 	$f = fopen($fname, 'w');
 
 	if ($f) {
-		$result=query("
-			SELECT `schema`, error_id, state, comment, timestamp
+		$sql = "SELECT `schema`, error_id, state, comment, timestamp
 			FROM $comments_name
 			WHERE `schema` IS NOT NULL AND `schema` != \"\"
-			ORDER BY `schema`, error_id
-		", $db1, false);
+			ORDER BY `schema`, error_id";
 
-		while ($row = mysqli_fetch_assoc($result)) {
+		foreach ($db->query($sql) as $row) {
 			fwrite($f,  smooth_text($row['schema'] ."\t". $row['error_id'] ."\t". $row['state'] ."\t". strtr($row['comment'], array("\t"=>" ", "\r\n"=>"<br>", "\n"=>"<br>")) ."\t". $row['timestamp']) . "\n");
 		}
 
-		mysqli_free_result($result);
 		fclose($f);
 		system("bzip2 --force $fname");
 	}
@@ -206,17 +191,12 @@ function get_state($db) {
 
 // returns the number of records in given table
 function count_star($db, $table) {
+	$sql="SELECT COUNT(*) AS c FROM $table";
 
-	$result=query("
-		SELECT COUNT(*) AS c
-		FROM $table
-	", $db, false);
-
-	while ($row = mysqli_fetch_assoc($result)) {
+	foreach ($db->query($sql) as $row) {
 		$c=$row['c'];
 	}
 
-	mysqli_free_result($result);
 	return $c;
 }
 
@@ -228,11 +208,11 @@ function smooth_text($txt) {
 
 
 // ensure there is an error_view_osmXX_shadow table for inserting records
-function toggle_tables1($db1, $schema){
+function toggle_tables1($db, $schema){
 	global $error_types_name, $comments_name, $comments_historic_name;
 
 	echo "setting up table structures and toggling tables\n";
-	query("
+	$db->query("
 		CREATE TABLE IF NOT EXISTS $comments_name (
 		`schema` varchar(6) NOT NULL DEFAULT '',
 		error_id int(11) NOT NULL,
@@ -243,8 +223,8 @@ function toggle_tables1($db1, $schema){
 		user_agent varchar(255) default NULL,
 		UNIQUE schema_error_id (`schema`, error_id)
 		) ENGINE=MyISAM DEFAULT CHARSET=utf8;
-	", $db1, false);
-	query("
+	");
+	$db->query("
 		CREATE TABLE IF NOT EXISTS $comments_historic_name (
 		`schema` varchar(6) NOT NULL DEFAULT '',
 		error_id int(11) NOT NULL,
@@ -255,18 +235,18 @@ function toggle_tables1($db1, $schema){
 		user_agent varchar(255) default NULL,
 		UNIQUE schema_error_id (`schema`, error_id)
 		) ENGINE=MyISAM DEFAULT CHARSET=utf8;
-	", $db1, false);
-	query("
+	");
+	$db->query("
 		CREATE TABLE IF NOT EXISTS $error_types_name (
 		error_type int(11) NOT NULL,
 		error_name varchar(100) NOT NULL,
 		error_description text NOT NULL,
 		PRIMARY KEY  (error_type)
 		) ENGINE=MyISAM DEFAULT CHARSET=utf8;
-	", $db1, false);
+	");
 
-	query("DROP TABLE IF EXISTS error_view_{$schema}_shadow", $db1);
-	query("
+	$db->query("DROP TABLE IF EXISTS error_view_{$schema}_shadow");
+	$db->query("
 		CREATE TABLE IF NOT EXISTS error_view_{$schema}_shadow (
 		`schema` varchar(6) NOT NULL DEFAULT '',
 		error_id int(11) NOT NULL,
@@ -292,10 +272,10 @@ function toggle_tables1($db1, $schema){
 		KEY lon (lon),
 		KEY error_type (error_type)
 		) ENGINE=MyISAM DEFAULT CHARSET=utf8;
-	", $db1, false);
-	query("ALTER TABLE error_view_{$schema}_shadow DISABLE KEYS", $db1);
+	");
+	$db->query("ALTER TABLE error_view_{$schema}_shadow DISABLE KEYS");
 
-	query("
+	$db->query("
 		CREATE TABLE IF NOT EXISTS error_view_{$schema} (
 		`schema` varchar(6) NOT NULL DEFAULT '',
 		error_id int(11) NOT NULL,
@@ -320,16 +300,16 @@ function toggle_tables1($db1, $schema){
 		KEY lon (lon),
 		KEY error_type (error_type)
 		) ENGINE=MyISAM DEFAULT CHARSET=utf8;
-	", $db1, false);
+	");
 
-	query("
+	$db->query("
 		CREATE TABLE IF NOT EXISTS error_counts (
 		`schema` varchar(6) NOT NULL,
 		error_type int(11) NOT NULL,
 		error_count int(1) NOT NULL,
 		UNIQUE schema_error_type (`schema`, error_type)
 		) ENGINE=MyISAM DEFAULT CHARSET=utf8;
-	", $db1, false);
+	");
 
 	echo "done.\n";
 }
@@ -347,8 +327,8 @@ function add_column_if_not_exists($db, $table, $column, $attribs) {
 function column_exists($db, $table, $column) {
 	$column_exists = false;
 
-	$rows = query("SHOW COLUMNS FROM `$table` WHERE Field='$column'", $db, false);
-	while($c = mysqli_fetch_assoc($rows)){
+	$sql = "SHOW COLUMNS FROM `$table` WHERE Field='$column'";
+	foreach ($db->query($sql) as $row) {
 		if($c['Field'] == $column){
 			$column_exists = true;
 			break;
@@ -378,27 +358,25 @@ function drop_index_if_exists($db, $table, $keyname) {
 // check if an index exists
 function index_exists($db, $table, $keyname) {
 
-	$rows = query("SHOW INDEX FROM `$table` WHERE Key_name='$keyname'", $db, false);
-	while($c = mysqli_fetch_assoc($rows)){
+	$sql = "SHOW INDEX FROM `$table` WHERE Key_name='$keyname'";
+	foreach ($db->query($sql) as $row) {
 		if($c['Key_name'] == $keyname){
-			mysqli_free_result($rows);
 			return true;
 		}
 	}
-	mysqli_free_result($rows);
 	return false;
 }
 
 
 // switch _shadow table to main table, rename main table to _old
-function toggle_tables2($db1, $schema){
+function toggle_tables2($db, $schema){
 	echo "toggling back tables\n";
 
-	query("ALTER TABLE error_view_{$schema}_shadow ENABLE KEYS", $db1);
+	$db->query("ALTER TABLE error_view_{$schema}_shadow ENABLE KEYS");
 
 
-	query("TRUNCATE error_view_{$schema}", $db1);
-	query("INSERT INTO error_view_{$schema} " .
+	$db->query("TRUNCATE error_view_{$schema}");
+	$db->query("INSERT INTO error_view_{$schema} " .
 		"(`schema`, error_id, error_type, object_type, object_id, state, " .
 			"first_occurrence, last_checked, object_timestamp, user_name, lat, lon, " .
 			"msgid, txt1, txt2, txt3, txt4, txt5) " .
@@ -406,26 +384,23 @@ function toggle_tables2($db1, $schema){
 			"first_occurrence, last_checked, object_timestamp, user_name, lat, lon, " .
 			"msgid, txt1, txt2, txt3, txt4, txt5 " .
 		"FROM error_view_{$schema}_shadow " .
-		"WHERE `schema` = '$schema'", $db1);
+		"WHERE `schema` = '$schema'");
 
-	query("DROP TABLE error_view_{$schema}_shadow", $db1);
+	$db->query("DROP TABLE error_view_{$schema}_shadow");
 
 	// update error counts
-	query("DELETE FROM error_counts WHERE `schema`='{$schema}'", $db1);
-	query("INSERT INTO error_counts (`schema`, error_type, error_count) " .
+	$db->query("DELETE FROM error_counts WHERE `schema`='{$schema}'");
+	$db->query("INSERT INTO error_counts (`schema`, error_type, error_count) " .
 		"SELECT '{$schema}', error_type, COUNT(error_id) " .
 		"FROM error_view_{$schema} " .
-		"GROUP BY error_type", $db1);
+		"GROUP BY error_type");
 
 	echo "done.\n";
 }
 
-function empty_error_types_table($db1){
+function empty_error_types_table($db){
 	global $error_types_name;
-	query("
-		TRUNCATE $error_types_name
-	", $db1);
-
+	$db->query("TRUNCATE $error_types_name");
 	echo "done.\n";
 }
 
@@ -452,12 +427,12 @@ function write_file($filename, $content) {
 // was downloaded (updated). Let's assume that max(object_timestamp)
 // equals the time of download.
 // Do this only if the error is still open in the newest error_view
-function reopen_errors($db1, $schema) {
+function reopen_errors($db, $schema) {
 	global $comments_name;
 
 	echo "reopening errors not solved by this update\n";
 
-	$sql="
+	$db->query("
 		UPDATE $comments_name c INNER JOIN error_view_$schema ev USING (`schema`, error_id)
 		SET c.state=null,
 		c.comment=CONCAT(\"[error still open, \", CURDATE(), \"] \", c.comment)
@@ -469,8 +444,7 @@ function reopen_errors($db1, $schema) {
 			FROM error_view_$schema tmp
 
 		), INTERVAL 1 HOUR)
-	";
-	query($sql, $db1);
+	");
 	echo "\ndone.\n";
 }
 
@@ -479,8 +453,8 @@ function reopen_errors($db1, $schema) {
 // dump file may be plain text or .bz2 compressed
 // file format has to be tab-separated text
 // just the way you receive from SELECT INTO OUTFILE
-function load_dump($db1, $filename, $destination, $schema) {
-	global $db_host, $db_user, $db_pass, $db_name, $error_types_name;
+function load_dump($db, $filename, $destination, $schema) {
+	global $error_types_name;
 
 	switch ($destination) {
 		case "error_types": $tbl=$error_types_name; break;
@@ -511,7 +485,7 @@ function load_dump($db1, $filename, $destination, $schema) {
 
 	system("($CAT $filename > $fifoname) >/dev/null &");	// must run in the background
 
-	query("LOAD DATA LOCAL INFILE '$fifoname' INTO TABLE $tbl", $db1);
+	$db->query("LOAD DATA LOCAL INFILE '$fifoname' INTO TABLE $tbl");
 
 	unlink($fifoname);
 

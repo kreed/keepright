@@ -11,10 +11,9 @@ left/top/right/bottom...borders of view
 ch...comma separated list of error type numbers
 */
 
-require('webconfig.inc.php');
 require('helpers.inc.php');
 
-$db1=mysqli_connect($db_host, $db_user, $db_pass, $db_name);
+$db=db_connect();
 
 $ch = $_GET['ch'];
 if (!$ch) $ch=0;
@@ -26,7 +25,7 @@ $bottom = 1e7*$_GET['bottom'];
 
 
 // select all error types where sub-types exist
-list($subtyped_errors, $nonsubtyped_errors, $subtyped_array, $subtyped_names_array) = get_subtyped_error_types($db1, $ch);
+list($subtyped_errors, $nonsubtyped_errors, $subtyped_array, $subtyped_names_array) = get_subtyped_error_types($db, $ch);
 
 
 // non-subtyped errors selected including the complete 10-window (always include
@@ -36,7 +35,7 @@ $where.=' AND lat BETWEEN ' . min($top, $bottom) . ' AND ' . max($top, $bottom);
 $where.=' AND lon BETWEEN ' . min($left, $right) . ' AND ' . max($left, $right);
 
 // lookup the schemas that have to be queried for the given coordinates
-$error_view = error_view_subquery($db1, $left, $top, $right, $bottom, $where);
+$error_view = error_view_subquery($db, $left, $top, $right, $bottom, $where);
 
 if ($error_view=='') {
 	echo "no errors found";
@@ -64,7 +63,7 @@ if ($_GET['format'] == 'rss') {
 $sql.=' AND (c.state IS NULL OR (c.state<>"ignore" AND c.state<>"ignore_temporarily"))';
 $sql .= ' LIMIT 10000';
 
-$result=mysqli_query($db1, $sql);
+$result=$db->query($sql);
 //echo "$sql\n";
 
 
@@ -82,8 +81,7 @@ if ($_GET['format'] == 'rss') {
 	\t\t\t<url>${baseURL}keepright.png</url>
 	\t\t</image>\n\n";
 
-	while ($row = mysqli_fetch_assoc($result)) {
-
+	foreach ($result as $row) {
 		// prepend the main error type on a subtyped error
 		if (in_array(10*floor($row['error_type']/10), $subtyped_array))
 			$title=$subtyped_names_array[10*floor($row['error_type']/10)] . ', ';
@@ -117,8 +115,7 @@ if ($_GET['format'] == 'rss') {
 	echo "<gpx xmlns=\"http://www.topografix.com/GPX/1/1\" creator=\"keepright\" version=\"1.1\" xmlns:xsi=\"http://www.w3.org/2001/XMLSchema-instance\" xsi:schemaLocation=\"http://www.topografix.com/GPX/1/1 http://www.topografix.com/GPX/1/1/gpx.xsd\">\n";
 
 
-	while ($row = mysqli_fetch_assoc($result)) {
-
+	foreach ($result as $row) {
 		// prepend the main error type on a subtyped error
 		if (in_array(10*floor($row['error_type']/10), $subtyped_array))
 			$title=$subtyped_names_array[10*floor($row['error_type']/10)] . ', ';
@@ -146,8 +143,4 @@ if ($_GET['format'] == 'rss') {
 	echo "invalid format parameter. Allowed values: rss, gpx";
 
 }
-
-
-mysqli_free_result($result);
-mysqli_close($db1);
 ?>

@@ -19,12 +19,10 @@ show_tmpign...if set enables display of temporarily ignored errors
 
 */
 
-require('webconfig.inc.php');
 require('helpers.inc.php');
 
-$db1=mysqli_connect($db_host, $db_user, $db_pass, $db_name);
-mysqli_query($db1, "SET SESSION wait_timeout=60");
-
+$db = db_connect();
+$db->query("SET SESSION wait_timeout=60");
 
 $ch = $_GET['ch'];
 if (!$ch) $ch=0;
@@ -39,7 +37,7 @@ if (!$st) $st='open';
 
 
 // select all error types where sub-types exist
-list($subtyped, $nonsubtyped) = get_subtyped_error_types($db1, $ch);
+list($subtyped, $nonsubtyped) = get_subtyped_error_types($db, $ch);
 
 
 // non-subtyped errors selected including the complete 10-window (always include
@@ -51,11 +49,11 @@ $where.=' AND lat >= ' . ($lat-3e6) . ' AND lat <= ' . ($lat+3e6);
 $where.=' AND lon >= ' . ($lon-3e6) . ' AND lon <= ' . ($lon+3e6);
 
 // lookup the schemas that have to be queried for the given coordinates for the center of screen
-$error_view = error_view_subquery($db1, $lon, $lat, $lon, $lat, $where);
+$error_view = error_view_subquery($db, $lon, $lat, $lon, $lat, $where);
 
 echo "{";
 
-$center_schema = find_schema($db1, $lat, $lon);
+$center_schema = find_schema($db, $lat, $lon);
 $updated_date=get_updated_date($center_schema);
 echo '"updated": "' . $updated_date . '",';
 
@@ -63,11 +61,11 @@ echo '"errors": {';
 
 if ($error_view=='') {
 	echo "]}";
-	mysqli_close($db1);
 	exit;
 }
 
 // build SQL for fetching errors
+$params = array();
 $sql="SELECT e.schema, e.error_id, e.error_type, COALESCE(c.state, e.state) as state, e.object_type, e.object_id, e.object_timestamp, e.user_name, e.lat/1e7 as la, e.lon/1e7 as lo, t.error_name, c.comment,
 e.msgid, e.txt1, e.txt2, e.txt3, e.txt4, e.txt5";
 
@@ -82,23 +80,22 @@ WHERE TRUE";
 
 if (!$show_ign) $sql.=' AND (c.state IS NULL OR c.state<>"ignore")';
 if (!$show_tmpign) $sql.=' AND (c.state IS NULL OR c.state<>"ignore_temporarily")';
-if ($user) $sql.=' AND (e.user_name = ?)';
+
+if ($user) {
+	$sql.=' AND (e.user_name = :user)';
+	$params['user'] = $user;
+}
 
 $sql .= " ORDER BY POWER(lat-$lat,2)+POWER(lon-$lon,2)";
 //$sql .= " ORDER BY RAND()";
 $sql .= ' LIMIT ' . $max_error_count;
 
-
-
 //echo "$sql\n";
-$stmt=mysqli_prepare($db1, $sql);
-if ($user) { mysqli_stmt_bind_param($stmt, 's', $user); }
-mysqli_stmt_execute($stmt);
-$result=mysqli_stmt_get_result($stmt);
+$stmt=$db->prepare($sql);
+$stmt->execute($params);
 
 $comma=false;
-
-while ($row = mysqli_fetch_assoc($result)) {
+foreach ($stmt as $row) {
 
 	if ($locale == 'en') {
 		$replacements = array('$1'=>$row['txt1'], '$2'=>$row['txt2'], '$3'=>$row['txt3'], '$4'=>$row['txt4'], '$5'=>$row['txt5']);
@@ -222,10 +219,6 @@ while ($row = mysqli_fetch_assoc($result)) {
 }
 
 echo '}}';
-
-mysqli_stmt_close($stmt);
-mysqli_close($db1);
-
 
 function hyperlink($object_type, $id) {
 	return "<a target='_blank' href='http://www.openstreetmap.org/browse/$object_type/$id'>$id</a>";
