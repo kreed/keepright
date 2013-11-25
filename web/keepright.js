@@ -528,7 +528,7 @@ var checkboxHash;
 var highlight_error;
 
 function init(highlight) {
-	map = L.map('map', { maxZoom: 19 });
+	map = L.map('map');
 
 	var latlon = default_latlon;
 	var zoom = default_zoom;
@@ -583,15 +583,13 @@ var mapLayers = {
 		url: "http://otile{s}.mqcdn.com/tiles/1.0.0/osm/{z}/{x}/{y}.png",
 		attribution: 'Data &copy; <a href="http://www.openstreetmap.org/copyright/en">OpenStreetMap</a> contributors, Tiles &copy; <a href="http://open.mapquest.com/">MapQuest</a>',
 		subdomains: "1234",
-		maxZoom: 19,
-		maxNativeZoom: 18
+		maxZoom: 18
 	},
 	transport: {
 		displayName: "Thunderforest Transport",
 		url: "http://{s}.tile.thunderforest.com/transport/{z}/{x}/{y}.png",
 		attribution: 'Data &copy; <a href="http://www.openstreetmap.org/copyright/en">OpenStreetMap</a> contributors, Tiles &copy; <a href="http://www.thunderforest.com/">Andy Allan</a>',
-		maxZoom: 19,
-		maxNativeZoom: 18
+		maxZoom: 18
 	}
 }
 
@@ -616,7 +614,12 @@ function initMapLayers(activeLayer) {
 
 	L.control.layers(baseLayers).addTo(map);
 	map.addLayer(active);
-	map.on('baselayerchange', saveLocals);
+	map.on('baselayerchange', function(e) {
+		if (map.getZoom() > e.layer.options.maxZoom) {
+			map.setView(map.getCenter(), e.layer.options.maxZoom, { reset: true });
+		}
+		saveLocals();
+	});
 
 	var errorLayer = L.layerGroup();
 	map.addLayer(errorLayer);
