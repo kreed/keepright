@@ -428,12 +428,14 @@ query("
 	GROUP BY er.part, er.cnt
 ", $db1);
 
-// faintly connected mini-roundabouts check
+// check for faintly connected roundabouts and mini-roundabouts
+// that are nodes rather than ways
 query("
 	WITH roundabouts AS (
 		SELECT node_id
 		FROM node_tags AS t
-		WHERE t.k='highway' AND t.v='mini_roundabout'
+		WHERE (t.k='highway' AND t.v='mini_roundabout')
+		OR (t.k='junction' AND t.v='roundabout')
 	),"
 
 // Find all ways containing the roundabout. Assume the roundabout is in the
