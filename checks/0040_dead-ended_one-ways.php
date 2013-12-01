@@ -32,46 +32,35 @@ find_oneways($db1);
 // these ways have their first (last) node (at least) twice in way_nodes
 // but with different sequence ids
 
-query("
-	INSERT INTO _tmp_errors (error_type, object_type, object_id, msgid, txt1, last_checked, lat, lon)
-	SELECT $error_type, 'way', o.way_id, 'The first node (id $1) of this one-way is not connected to any other way', o.first_node_id, NOW(), 1e7*o.first_node_lat, 1e7*o.first_node_lon
-	FROM _tmp_one_ways o
-	WHERE o.first_node_id<>o.last_node_id AND
-	NOT EXISTS(
-		SELECT way_id
-		FROM way_nodes wn1
-		WHERE o.first_node_id=wn1.node_id AND wn1.way_id<>o.way_id
-	) AND
-	NOT EXISTS(
-		SELECT way_id
-		FROM way_nodes wn2
-		WHERE o.first_node_id=wn2.node_id AND wn2.way_id=o.way_id
-		GROUP BY way_id, node_id
-		HAVING COUNT(DISTINCT sequence_id)>1
-	)
-", $db1);
+// finally, exclude ways where the dead-end is marked explicitly with noexit=yes.
+// sometimes dead-ended one-ways are legitimate due to construction or other factors.
 
-// do the same for the last node of one-ways
-query("
-	INSERT INTO _tmp_errors (error_type, object_type, object_id, msgid, txt1, last_checked, lat, lon)
-	SELECT $error_type+1, 'way', o.way_id, 'The last node (id $1) of this one-way is not connected to any other way', o.last_node_id, NOW(), 1e7*o.last_node_lat, 1e7*o.last_node_lon
-	FROM _tmp_one_ways o
-	WHERE o.first_node_id<>o.last_node_id AND
-	NOT EXISTS(
-		SELECT way_id
-		FROM way_nodes wn2
-		WHERE o.last_node_id=wn2.node_id AND wn2.way_id<>o.way_id
-	) AND
-	NOT EXISTS(
-		SELECT way_id
-		FROM way_nodes wn2
-		WHERE o.last_node_id=wn2.node_id AND wn2.way_id=o.way_id
-		GROUP BY way_id, node_id
-		HAVING COUNT(DISTINCT sequence_id)>1
-	)
-
-", $db1);
-
+foreach (array('first', 'last') as $item) {
+	query("
+		INSERT INTO _tmp_errors (error_type, object_type, object_id, msgid, txt1, last_checked, lat, lon)
+		SELECT $error_type, 'way', o.way_id, 'The $item node (id $1) of this one-way is not connected to any other way', o.${item}_node_id, NOW(), 1e7*o.${item}_node_lat, 1e7*o.${item}_node_lon
+		FROM _tmp_one_ways o
+		WHERE o.first_node_id<>o.last_node_id AND
+		NOT EXISTS(
+			SELECT way_id
+			FROM way_nodes wn1
+			WHERE o.${item}_node_id=wn1.node_id AND wn1.way_id<>o.way_id
+		) AND
+		NOT EXISTS(
+			SELECT way_id
+			FROM way_nodes wn2
+			WHERE o.${item}_node_id=wn2.node_id AND wn2.way_id=o.way_id
+			GROUP BY way_id, node_id
+			HAVING COUNT(DISTINCT sequence_id)>1
+		)
+		AND NOT EXISTS(
+			SELECT node_id
+			FROM node_tags t
+			WHERE o.${item}_node_id=t.node_id
+			AND t.k='noexit' AND t.v='yes'
+		)
+		", $db1);
+}
 
 // another point is nodes that are connected to other one-way streets but
 // direction of ways was chosen wrongly so that one-way streets clash:
